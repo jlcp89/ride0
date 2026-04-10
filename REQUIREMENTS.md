@@ -41,8 +41,34 @@ Raw SQL for trips >1hr from pickup to dropoff, grouped by month and driver.
 
 ---
 
+## React Frontend (ride1)
+
+**Status:** not-started
+**Created:** 2026-04-10
+**Priority:** P1
+**Location:** `/home/jl2/work/wingz/ride1` (sibling to ride0, separate git repo)
+**Implementation prompt:** `docs/prompts/PHASE_2_FRONTEND.md`
+
+### Problem
+Assessment benefits from a working frontend demo of the ride list API. Must deploy to the same EC2 instance currently running `wingz-api.service` without disrupting the backend.
+
+### Acceptance Criteria
+- [ ] Vite + React SPA scaffolded at `wingz/ride1/` as its own git repo
+- [ ] `fetchRides()` service with HTTP Basic Auth via `VITE_*` env vars
+- [ ] `RideTable` + `Pagination` + inline filter form in `App.jsx`
+- [ ] Filter by status, filter by rider email, sort by pickup_time
+- [ ] `npm run lint` and `npm run build` pass with zero warnings
+- [ ] `deploy/nginx-wingz.conf` committed — serves static + proxies `/api/` to `:8000`
+- [ ] `.github/workflows/deploy.yaml` builds on CI and ships `dist/` via SCP
+- [ ] nginx installed on EC2, replacing the current port 80 → 8000 shortcut
+- [ ] `wingz-api.service` systemd unit remains unchanged
+- [ ] `ride0/tests/test_deployed_api.sh http://107.23.122.99` still passes post-cutover
+- [ ] README with dev + production architecture diagrams, deployment section, and Basic Auth tradeoff callout
+
+---
+
 ## Parking Lot
 
 Future ideas and deferred items. Move to active requirements when ready.
 
-- Frontend React dashboard for ride visualization
+- (empty)

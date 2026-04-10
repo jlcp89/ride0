@@ -1,158 +1,183 @@
-# Phase 2 — Frontend + Docker + Documentation
+# Phase 2 — React Frontend (ride1)
 
 ## Role
 
-You are a **Senior Full-Stack Engineer** finishing a take-home assessment. Phase 0 generated artifacts. Phase 1 built the backend with TDD. This phase makes the project **submission-ready** — Docker orchestration, a README that demonstrates senior-level thinking, and a clean frontend.
+You are a **Senior Full-Stack Engineer** building the frontend companion for the Wingz ride management API. The backend (`ride0`) is already complete, tested, and deployed. This phase delivers a clean, functional React SPA that consumes that API — as a **separate, sibling project** at `wingz/ride1`.
 
 ## Mission
 
-Priority order:
-1. **Docker Compose** — `docker compose up` and everything works, first try
-2. **README** — the single most important file for the assessor. Architecture decisions, tradeoffs, production considerations.
-3. **Frontend** — functional, clean, demonstrates the API. Don't over-invest.
-4. **Makefile** — operational convenience that signals production mindset
-5. **Final git polish**
+Deliver a React + Vite frontend that demonstrates the ride list API and deploys to the **same EC2 instance** currently running the backend:
+
+1. **Scaffold** a new Vite + React project at `/home/jl2/work/wingz/ride1`
+2. **Wire up** the ride list with filters, sorting, and pagination against the ride0 API
+3. **Keep it focused** — functional UI, no decorative flourishes, no CSS frameworks
+4. **Deploy to EC2** — same box as ride0, served by nginx on port 80 alongside the gunicorn API
+5. **Ship it cleanly** — passes lint, builds without warnings, sensible commit history
+
+The backend source is not in scope. Do not touch `/home/jl2/work/wingz/ride0/backend/` during this phase except to read the API contract. The backend **runtime** on EC2 (`wingz-api.service`) stays exactly as it is — the new deployment only adds nginx in front of it.
 
 ## Context
 
-Read before starting:
-- `./CLAUDE.md` — conventions
-- `./docs/artifacts/features/ride-list-api/api-contract.md` — response format
-- `./docs/artifacts/analysis/architecture-decisions.md` — decisions to include in README
-- Backend is complete in `./backend/` with passing tests
+### Backend location
+- **Source code** (read-only reference): `/home/jl2/work/wingz/ride0/backend/`
+- **API contract**: `/home/jl2/work/wingz/ride0/docs/artifacts/features/ride-list-api/api-contract.md`
+- **Deployed instance**: `http://107.23.122.99` (validated — see `ride0/tests/test_deployed_api.sh`)
+- **Local dev instance**: `http://localhost:8000` (run via `cd ride0/backend && python manage.py runserver`)
+
+### EC2 runtime (target deployment host)
+The deployed backend runs on an EC2 instance as a systemd service:
+
+- **Service**: `wingz-api.service` (systemd)
+- **Process**: `gunicorn --bind 0.0.0.0:8000 wingz.wsgi:application`
+- **App directory**: `/home/ec2-user/production/wingz/`
+- **SSH user**: `ec2-user`
+- **OS**: Amazon Linux (assume `dnf`/`yum` for package install)
+- **Port 80 → 8000**: currently routed by some mechanism (iptables PREROUTING rule or similar) — `http://107.23.122.99/api/rides/` works without a `:8000` suffix. This routing **must be replaced** by the nginx reverse proxy introduced in Step 6.
+
+The frontend deploy will **add** nginx and **remove** the port 80 → 8000 shortcut, but will not change gunicorn or the systemd unit.
+
+### Seed credentials (deterministic — defined in `ride0/backend/rides/management/commands/seed_db.py`)
+- Email: `admin@wingz.com`
+- Password: `adminpass123`
+- Role: `admin`
+
+### Seed data expectations
+- 24 rides total, 8 per status (`en-route`, `pickup`, `dropoff`), 8 per rider
+- GPS zones in Guatemala City for distance-sort testing
+
+### API endpoint summary
+`GET /api/rides/` — HTTP Basic Auth, admin role required. Query params:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| status | string | `en-route`, `pickup`, `dropoff` |
+| rider_email | string | Exact match |
+| sort_by | string | `pickup_time` or `distance` |
+| latitude | float | Required when `sort_by=distance` |
+| longitude | float | Required when `sort_by=distance` |
+| page | int | Default 1 |
+| page_size | int | Default 10, max 100 |
+
+Response shape: `{ count, next, previous, results: [{ id_ride, status, id_rider: {...}, id_driver: {...}, pickup_time, pickup_latitude, pickup_longitude, dropoff_latitude, dropoff_longitude, todays_ride_events: [...] }] }`
 
 ---
 
-## Commit Strategy (continued from Phase 1)
+## Project Location
 
 ```
-Commit 13: "docker: Compose + backend Dockerfile + healthchecks"
-Commit 14: "frontend: React app with ride list, filters, pagination"
-Commit 15: "docs: comprehensive README with architecture decisions and Makefile"
+/home/jl2/work/wingz/
+├── ride0/          # Existing backend — DO NOT MODIFY
+└── ride1/          # New frontend — created in this phase
 ```
+
+Start from an empty `ride1/` directory. The scaffolding command creates it.
 
 ---
 
-## Step 1: Docker Compose
+## Commit Strategy
 
-**Commit: "docker: Compose + backend Dockerfile + healthchecks"**
+Work inside `ride1/` as its own git repository. Initialize it as a fresh repo — do not nest it inside ride0's git history.
 
-This commit includes the backend Dockerfile created at the end of Phase 1.
-
-### `docker-compose.yml` (project root)
-
-```yaml
-services:
-  db:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-wingz_db}
-      MYSQL_USER: ${MYSQL_USER:-appuser}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-apppass}
-    ports:
-      - "3306:3306"
-    volumes:
-      - db_data:/var/lib/mysql
-      - ./backend/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
-      - ./backend/sql/seed_data.sql:/docker-entrypoint-initdb.d/02-seed.sql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    environment:
-      DB_HOST: db
-      DB_PORT: "3306"
-      DB_USER: ${MYSQL_USER:-appuser}
-      DB_PASSWORD: ${MYSQL_PASSWORD:-apppass}
-      DB_NAME: ${MYSQL_DATABASE:-wingz_db}
-    depends_on:
-      db:
-        condition: service_healthy
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "8080:80"
-    depends_on:
-      - backend
-
-volumes:
-  db_data:
+```
+Commit 1: "scaffold: Vite + React project with .gitignore"
+Commit 2: "api: fetchRides service with Basic Auth and env-driven base URL"
+Commit 3: "ui: RideTable, Pagination, and App orchestrator with filters"
+Commit 4: "style: functional layout, status badges, error states"
+Commit 5: "deploy: nginx reverse proxy + GitHub Actions workflow for EC2"
+Commit 6: "docs: README with setup, env config, and deployment notes"
 ```
 
-Design notes (these go in the README, not as inline comments):
-- Init scripts prefixed `01-`, `02-` for deterministic execution order
-- `service_healthy` prevents backend from starting before MySQL accepts connections
-- Named volume preserves data across restarts
-- Sensible `.env` defaults so `docker compose up` works without configuration
+Adjust as needed — the point is a readable commit history, not rigid adherence to these exact messages.
 
-**Verify:** `docker compose config` validates the file.
+---
+
+## Step 1: Scaffold
+
+**Commit: "scaffold: Vite + React project with .gitignore"**
+
+From `/home/jl2/work/wingz/`:
+
+```bash
+npm create vite@latest ride1 -- --template react
+cd ride1
+npm install
+git init
+```
+
+### Target structure
+```
+ride1/
+├── src/
+│   ├── components/
+│   │   ├── RideTable.jsx       # Table of rides with status badges
+│   │   └── Pagination.jsx      # Prev/Next + page info
+│   ├── services/
+│   │   └── api.js              # fetchRides() wrapper
+│   ├── App.jsx                 # Orchestrator: filters + table + pagination
+│   ├── App.css                 # Functional styles
+│   └── main.jsx
+├── .env.example                # VITE_API_BASE_URL, VITE_ADMIN_EMAIL, VITE_ADMIN_PASSWORD
+├── .env.local                  # Gitignored — local dev overrides
+├── .gitignore                  # node_modules, dist, .env.local
+├── index.html
+├── package.json
+├── vite.config.js
+└── README.md
+```
+
+**Verify:** `npm run dev` launches successfully on port 5173 (even with default Vite template).
 
 **COMMIT.**
 
 ---
 
-## Step 2: Frontend
+## Step 2: API Service
 
-**Commit: "frontend: React app with ride list, filters, pagination"**
-
-### Scaffold
-```bash
-npm create vite@latest frontend -- --template react
-cd frontend && npm install
-```
-
-**IMPORTANT:** The assessment asks for a RESTful API, not a frontend. The frontend is a bonus to demonstrate full-stack capability. If the frontend build fails or causes Docker issues, **skip it and move on** — the backend is the priority. Ensure the backend service is independently accessible on port 8000 regardless of frontend status.
-
-### Structure
-```
-frontend/
-├── src/
-│   ├── components/
-│   │   ├── RideTable.jsx        # Table of rides with all fields + status badges
-│   │   └── Pagination.jsx       # Prev/Next + page info
-│   ├── services/
-│   │   └── api.js               # fetchRides() wrapper with auth
-│   ├── App.jsx                  # Main orchestrator: filters + table + pagination
-│   ├── App.css                  # Clean functional styles
-│   └── main.jsx
-├── Dockerfile                   # Multi-stage: build + nginx
-├── nginx.conf                   # Reverse proxy for /api/
-├── .dockerignore
-├── package.json
-└── vite.config.js
-```
+**Commit: "api: fetchRides service with Basic Auth and env-driven base URL"**
 
 ### `vite.config.js`
+Use the Vite dev proxy to route `/api/` requests to the backend, avoiding CORS entirely during local development:
+
 ```javascript
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': { target: 'http://localhost:8000', changeOrigin: true }
-    }
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  return {
+    plugins: [react()],
+    server: {
+      port: 5173,
+      proxy: {
+        '/api': {
+          target: env.VITE_API_BASE_URL || 'http://localhost:8000',
+          changeOrigin: true,
+        },
+      },
+    },
   }
 })
 ```
+
+### `.env.example`
+```env
+# Backend base URL — where Vite dev proxy forwards /api requests
+VITE_API_BASE_URL=http://localhost:8000
+
+# Seed admin credentials from ride0/backend/rides/management/commands/seed_db.py
+VITE_ADMIN_EMAIL=admin@wingz.com
+VITE_ADMIN_PASSWORD=adminpass123
+```
+
+Copy to `.env.local` for local runs. Point `VITE_API_BASE_URL` at `http://107.23.122.99` to hit the deployed instance instead of local.
 
 ### `src/services/api.js`
 ```javascript
 const API_BASE = '/api'
 
-// Default admin credentials — matches seed data
-const AUTH_HEADER = 'Basic ' + btoa('admin@wingz.com:adminpass123')
+const email = import.meta.env.VITE_ADMIN_EMAIL || 'admin@wingz.com'
+const password = import.meta.env.VITE_ADMIN_PASSWORD || 'adminpass123'
+const AUTH_HEADER = 'Basic ' + btoa(`${email}:${password}`)
 
 export async function fetchRides(params = {}) {
   const query = new URLSearchParams()
@@ -160,7 +185,7 @@ export async function fetchRides(params = {}) {
     if (v !== '' && v !== null && v !== undefined) query.append(k, v)
   })
   const res = await fetch(`${API_BASE}/rides/?${query}`, {
-    headers: { 'Authorization': AUTH_HEADER },
+    headers: { Authorization: AUTH_HEADER },
   })
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
@@ -170,8 +195,21 @@ export async function fetchRides(params = {}) {
 }
 ```
 
+**Note on credentials in env vars:** Vite inlines `VITE_*` variables into the client bundle — anyone inspecting the built JS can read them. This is acceptable for an assessment demo with seed credentials, but a production app would use a real login flow and token storage. Call this out in the README.
+
+**Verify:** Import `fetchRides` in a scratch console in the browser and confirm it returns data.
+
+**COMMIT.**
+
+---
+
+## Step 3: Components + Orchestrator
+
+**Commit: "ui: RideTable, Pagination, and App orchestrator with filters"**
+
 ### `src/App.jsx`
-Main orchestrator with inline filter form. Keep it simple — filters are part of App, not a separate component.
+
+Keep filters inline — they're part of the orchestrator, not a separate component.
 
 ```jsx
 import { useState, useEffect } from 'react'
@@ -180,13 +218,15 @@ import RideTable from './components/RideTable'
 import Pagination from './components/Pagination'
 import './App.css'
 
+const PAGE_SIZE = 10
+
 export default function App() {
   const [rides, setRides] = useState([])
   const [count, setCount] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  // Filter state
+
   const [status, setStatus] = useState('')
   const [riderEmail, setRiderEmail] = useState('')
   const [sortBy, setSortBy] = useState('')
@@ -195,7 +235,7 @@ export default function App() {
     setLoading(true)
     setError('')
     try {
-      const params = { page: p, page_size: 10 }
+      const params = { page: p, page_size: PAGE_SIZE }
       if (status) params.status = status
       if (riderEmail) params.rider_email = riderEmail
       if (sortBy) params.sort_by = sortBy
@@ -227,8 +267,11 @@ export default function App() {
           <option value="pickup">pickup</option>
           <option value="dropoff">dropoff</option>
         </select>
-        <input placeholder="Rider email" value={riderEmail}
-               onChange={e => setRiderEmail(e.target.value)} />
+        <input
+          placeholder="Rider email"
+          value={riderEmail}
+          onChange={e => setRiderEmail(e.target.value)}
+        />
         <select value={sortBy} onChange={e => setSortBy(e.target.value)}>
           <option value="">No sorting</option>
           <option value="pickup_time">Pickup Time</option>
@@ -241,8 +284,12 @@ export default function App() {
       {!loading && !error && (
         <>
           <RideTable rides={rides} />
-          <Pagination count={count} page={page} pageSize={10}
-                      onChange={p => { setPage(p); load(p) }} />
+          <Pagination
+            count={count}
+            page={page}
+            pageSize={PAGE_SIZE}
+            onChange={p => { setPage(p); load(p) }}
+          />
         </>
       )}
     </div>
@@ -250,501 +297,496 @@ export default function App() {
 }
 ```
 
-### Components
+### `src/components/RideTable.jsx`
+- HTML `<table>` with columns: ID, Status (color-coded badge), Rider, Driver, Pickup Time, Events (count from `todays_ride_events`)
+- Status badge colors inline via `style`: blue=`en-route`, amber=`pickup`, green=`dropoff`
+- Empty state: "No rides match these filters."
+- No expandable rows, no CSS Grid cards, no icons
 
-**`RideTable.jsx`:**
-- HTML table with columns: ID, Status (color-coded badge inline), Rider, Driver, Pickup Time, Events count
-- Status badge colors inline via style (blue=en-route, amber=pickup, green=dropoff)
-- Simple, functional — no CSS Grid cards or expandable sections
+### `src/components/Pagination.jsx`
+- Previous/Next buttons, disabled at boundaries
+- "Page X of Y" text between them
+- `totalPages = Math.max(1, Math.ceil(count / pageSize))`
 
-**`Pagination.jsx`:**
-- Previous/Next buttons (disabled at boundaries)
-- "Page X of Y" text
+**Verify:** `npm run dev`, load the page, confirm:
+- Table renders seed data
+- Status filter narrows to 8 rows per status
+- Rider email filter narrows to 8 rows per rider
+- Sort by pickup_time reorders
+- Pagination Prev/Next walk through the 24 rows
 
-### `App.css`
-Minimal, functional:
-- Clean table styling
-- Filter bar as horizontal flex row
-- Status badge colors
-- Error state styling
-- No CSS framework, nothing decorative
+**COMMIT.**
 
-### Frontend Dockerfile
-```dockerfile
-FROM node:18-alpine AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+---
 
-FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+## Step 4: Styling
+
+**Commit: "style: functional layout, status badges, error states"**
+
+### `src/App.css`
+
+Minimal, functional. No CSS framework, no decorative elements.
+
+- Centered `.app` container, ~1000px max-width, comfortable padding
+- `.filters` as a horizontal flex row with consistent gap
+- `<table>` with clean borders, zebra striping, left-aligned headers
+- Status badges: small rounded rectangle, white text, bold, 12px padding
+- `.error` in red with a light red background
+- Loading state: simple italic text (no spinner)
+
+Delete the default Vite CSS (`index.css` styles, `App.css` template content, logo assets) — leave a clean slate.
+
+**Verify:** Visual inspection in browser — the page should look like a no-nonsense internal tool, not a marketing page.
+
+**COMMIT.**
+
+---
+
+## Step 5: EC2 Deployment
+
+**Commit: "deploy: nginx reverse proxy + GitHub Actions workflow for EC2"**
+
+The frontend deploys to the **same EC2 instance** that already runs `wingz-api.service`. The target topology is nginx on port 80 serving the static build and proxying `/api/` to `localhost:8000`.
+
+### ⚠️ Pre-flight — STOP before making any infrastructure changes
+
+Before running any commands on EC2, SSH in and **investigate the current state**:
+
+```bash
+ssh ec2-user@107.23.122.99
+sudo systemctl status wingz-api          # Confirm gunicorn is healthy
+sudo ss -tlnp | grep -E ':(80|8000)'      # What's listening on 80 and 8000?
+sudo iptables -t nat -L PREROUTING -n    # Is there a port forward rule?
+which nginx && nginx -v || echo "nginx not installed"
+ls /etc/nginx/ 2>/dev/null || echo "no nginx config dir"
 ```
 
-### `nginx.conf`
+**Report findings to the user** (what's on port 80, how 80→8000 works today, whether nginx is already present) **and wait for approval** before proceeding. This matches the global rule: when something is unclear or a destructive change is needed, stop and ask.
+
+Only after approval, continue with the steps below.
+
+### `ride1/deploy/nginx-wingz.conf`
+
+Commit this file to the repo as the source of truth for the nginx site config. The GitHub Actions workflow copies it to `/etc/nginx/conf.d/wingz.conf` on the EC2 host.
+
 ```nginx
 server {
-    listen 80;
-    server_name localhost;
+    listen 80 default_server;
+    server_name _;
 
+    root /home/ec2-user/production/ride1/dist;
+    index index.html;
+
+    # SPA fallback — any non-file path returns index.html so client-side
+    # routing works even if a user refreshes a deep link.
     location / {
-        root /usr/share/nginx/html;
-        index index.html;
         try_files $uri $uri/ /index.html;
     }
 
+    # Reverse proxy /api/ to gunicorn. Same origin for the browser → no CORS.
     location /api/ {
-        proxy_pass http://backend:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 60s;
+    }
+
+    # Cache static assets aggressively — Vite produces hashed filenames.
+    location ~* \.(?:js|css|woff2?|svg|png|jpg|jpeg|gif|ico)$ {
+        expires 7d;
+        add_header Cache-Control "public, immutable";
     }
 }
 ```
 
-### `.dockerignore`
-```
-node_modules
-dist
-.git
+### `.github/workflows/deploy.yaml` (in `ride1/`)
+
+Build on CI (not on EC2 — avoids installing Node on the production host) and ship the `dist/` directory over SSH.
+
+```yaml
+name: Deploy Frontend to EC2
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+    branches: [main, dev]
+
+jobs:
+  build:
+    name: Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+          retention-days: 1
+
+  deploy_prod:
+    name: Deploy PROD
+    needs: build
+    if: |
+      github.event_name == 'push' ||
+      (github.event.pull_request.base.ref == 'main' &&
+       github.event.action == 'closed' &&
+       github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist/
+
+      - name: Copy dist + nginx config to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST_PROD }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "dist/*,deploy/nginx-wingz.conf"
+          target: "/home/ec2-user/ride1-staging"
+          strip_components: 0
+
+      - name: Install nginx + activate new build
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST_PROD }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            # One-time install (idempotent)
+            if ! command -v nginx >/dev/null 2>&1; then
+              sudo dnf install -y nginx
+              sudo systemctl enable nginx
+            fi
+
+            # Remove any stale port 80 → 8000 forwarding rule left from the
+            # previous deployment. Safe to run even if no rule exists.
+            sudo iptables -t nat -F PREROUTING || true
+
+            # Atomically swap in the new build
+            sudo mkdir -p /home/ec2-user/production/ride1
+            sudo rm -rf /home/ec2-user/production/ride1/dist
+            sudo mv /home/ec2-user/ride1-staging/dist /home/ec2-user/production/ride1/dist
+            sudo chown -R ec2-user:ec2-user /home/ec2-user/production/ride1
+
+            # Install the nginx site config
+            sudo cp /home/ec2-user/ride1-staging/deploy/nginx-wingz.conf \
+                    /etc/nginx/conf.d/wingz.conf
+            # Disable the default welcome server if Amazon Linux shipped one
+            sudo rm -f /etc/nginx/conf.d/default.conf
+
+            # Validate and reload — fail loudly if the config is bad
+            sudo nginx -t
+            sudo systemctl restart nginx
+
+            # Clean up staging dir
+            rm -rf /home/ec2-user/ride1-staging
+
+            # Smoke test both the frontend and the proxied API
+            curl -sf http://localhost/ -o /dev/null -w "FRONTEND %{http_code}\n"
+            curl -sf -u admin@wingz.com:adminpass123 \
+              http://localhost/api/rides/ -o /dev/null -w "API %{http_code}\n"
 ```
 
-**Verify:** `cd frontend && npm run build` succeeds.
+### Required GitHub Actions secrets (in `ride1` repo settings)
+
+| Secret | Description |
+|--------|-------------|
+| `EC2_HOST_PROD` | Same value as ride0's secret — `107.23.122.99` |
+| `EC2_SSH_KEY` | Same SSH private key as ride0 |
+
+### Post-deploy sanity checks
+
+After the first successful run, verify from a local machine:
+
+```bash
+curl -sf http://107.23.122.99/ -o /dev/null -w "%{http_code}\n"
+curl -sf -u admin@wingz.com:adminpass123 http://107.23.122.99/api/rides/ | jq '.count'
+bash /home/jl2/work/wingz/ride0/tests/test_deployed_api.sh http://107.23.122.99
+```
+
+The ride0 validation script must still pass end-to-end — the nginx reverse proxy should be transparent to it.
 
 **COMMIT.**
 
 ---
 
-## Step 3: README — The Differentiator
+## Step 6: README
 
-**Commit: "docs: comprehensive README with architecture decisions"**
+**Commit: "docs: README with setup, env config, and deployment notes"**
 
-**Read:** `docs/artifacts/analysis/architecture-decisions.md` — weave these into the README.
-
-### `README.md` (project root)
-
-This is the single most impactful file. Write it as a senior engineer would write an architecture document — not just setup instructions.
+### `ride1/README.md`
 
 ```markdown
-# Wingz Ride Management API
+# Wingz Ride Management — Frontend
 
-RESTful API built with Django REST Framework for managing ride information,
-featuring optimized query performance, database-level distance sorting, and
-comprehensive test coverage.
+React + Vite SPA for the Wingz ride management API. Companion to the
+[`ride0`](../ride0) backend.
 
 ## Quick Start
 
 ```bash
-# Prerequisites: Docker and Docker Compose installed
-cp .env.example .env
-docker compose up -d
+# Prerequisites: Node 18+, npm
+cp .env.example .env.local
+# Edit .env.local if you want to point at a deployed backend
 
-# Wait ~30s for MySQL to initialize, then:
-# API:      http://localhost:8000/api/rides/
-# Frontend: http://localhost:8080
+npm install
+npm run dev
+# Open http://localhost:5173
 ```
+
+By default, the Vite dev proxy routes `/api` to `http://localhost:8000` (local
+ride0 backend). To hit the deployed instance instead:
+
+```env
+VITE_API_BASE_URL=http://107.23.122.99
+```
+
+## Features
+
+- Paginated ride list with nested rider, driver, and today's events
+- Filter by status (`en-route`, `pickup`, `dropoff`)
+- Filter by rider email (exact match)
+- Sort by pickup time
+- Prev/Next pagination with page count
 
 ## Architecture
 
+### Local development
 ```
-┌────────────┐      ┌────────────┐      ┌──────────────┐
-│  Frontend  │─────▶│   nginx    │─────▶│   Backend    │
-│   (React)  │      │  (proxy)   │      │ (Django/DRF) │
-└────────────┘      └────────────┘      └──────┬───────┘
-                                               │
-                                         ┌─────▼──────┐
-                                         │   MySQL    │
-                                         │    8.0     │
-                                         └────────────┘
+┌──────────────┐   /api proxy   ┌──────────────┐
+│  React SPA   │───────────────▶│ ride0 Django │
+│  (Vite 5173) │                │ (port 8000)  │
+└──────────────┘                └──────────────┘
 ```
 
-nginx serves the React SPA and proxies `/api/` requests to the Django backend.
-This eliminates CORS entirely — frontend and API share the same origin.
+The Vite dev server proxies `/api/*` to the backend, so the browser never makes
+a cross-origin request — no CORS configuration needed.
 
-## API Reference
-
-### `GET /api/rides/`
-
-Paginated list of rides with nested rider, driver, and today's ride events.
-
-**Authentication:** HTTP Basic Auth with email and password. Only users with `role='admin'` can access.
-
-```bash
-curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
+### Production (EC2, single instance)
+```
+           http://107.23.122.99
+                   │
+                   ▼
+        ┌──────────────────────┐
+        │   nginx :80          │
+        │   ┌──────────────┐   │
+        │   │ / → dist/    │   │  (static React build)
+        │   │ /api/ → :8000│   │  (reverse proxy)
+        │   └──────────────┘   │
+        └──────────┬───────────┘
+                   │
+                   ▼
+        ┌──────────────────────┐
+        │  gunicorn :8000      │  (wingz-api.service)
+        │  Django + DRF        │
+        └──────────────────────┘
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| status | string | Filter: en-route, pickup, dropoff |
-| rider_email | string | Filter: exact match on rider email |
-| sort_by | string | `pickup_time` or `distance` |
-| latitude | float | Required when sort_by=distance |
-| longitude | float | Required when sort_by=distance |
-| page | int | Page number (default 1) |
-| page_size | int | Results per page (default 10, max 100) |
-
-**Examples:**
-```bash
-# All rides (admin credentials required)
-curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
-
-# Filter + sort
-curl -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?status=pickup&sort_by=pickup_time"
-
-# Distance from Zone 10, Guatemala City
-curl -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?sort_by=distance&latitude=14.5995&longitude=-90.5131"
-```
-
-## Design Decisions
-
-### Performance: 2-3 SQL Queries for the Ride List
-
-This was the hardest requirement. The full ride list — with nested rider, driver,
-and today's events — loads in exactly **3 queries**:
-
-1. `COUNT(*)` for pagination total
-2. `SELECT rides JOIN users` via `select_related('id_rider', 'id_driver')`
-3. `SELECT ride_events WHERE created_at >= 24h ago` via `Prefetch` with filtered
-   queryset and `to_attr='todays_ride_events'`
-
-**Why `Prefetch(to_attr=...)` over a serializer method field?**
-A `SerializerMethodField` like `get_todays_ride_events(obj)` would execute a query
-per ride — the classic N+1 problem. With 100 rides per page, that's 100 extra queries.
-`Prefetch` batches all into a single filtered query regardless of page size.
-
-This is verified in `test_performance.py` using Django's `CaptureQueriesContext`.
-
-### Distance Sorting: Haversine at the Database Level
-
-The spec assumes a very large rides table, so sorting MUST happen in the database.
-Loading all rides into Python to sort would:
-- Break pagination (can't LIMIT/OFFSET after an in-memory sort)
-- Require O(n) memory
-- Be unacceptably slow at scale
-
-I use a `RawSQL` annotation with the Haversine formula, which lets
-`ORDER BY distance` work with standard pagination.
-
-**Tradeoffs and production alternatives:**
-| Approach | Pros | Cons |
-|----------|------|------|
-| RawSQL Haversine (current) | Works on MySQL+SQLite, no schema changes | Full table scan for sorting |
-| MySQL `ST_Distance_Sphere()` | Native, well-optimized | MySQL-specific, breaks SQLite tests |
-| Spatial index on POINT column | O(log n) lookup | Requires schema change (spec prohibits) |
-| PostGIS + GeoDjango | Most powerful geo support | PostgreSQL required, heavy dependency |
-
-For production with millions of rides, I would add a spatial index — but the spec says
-we cannot modify the table structure.
-
-### Custom User Model with BasicAuthentication
-
-The spec defines a custom `users` table with `id_user` and `role`. Rather than force-fit
-this into Django's `AbstractUser`, I created a standalone model with a `password` field
-(hashed via Django's `make_password`). A custom `EmailBasicAuthentication` class handles
-HTTP Basic Auth using email + password, while `IsAdminRole` checks `user.role == 'admin'`.
-
-**Why not Django's auth system?** The spec's table structure doesn't match `AbstractUser`
-(no `username`, no `is_staff`, custom PK). Forcing compatibility would add complexity
-for no benefit. A standalone model with Basic Auth is simpler and sufficient.
-
-**Tradeoff:** We lose Django admin login, but the spec doesn't require it. Production
-would use Token/JWT auth instead of Basic Auth.
-
-### SQLite for Tests, MySQL for Production
-
-Tests run on SQLite in-memory for speed (~2s full suite vs ~10s with MySQL). SQLite lacks
-math functions needed for Haversine, so a pytest autouse fixture registers them:
-
-```python
-@pytest.fixture(autouse=True)
-def _register_sqlite_math(db):
-    if connection.vendor == 'sqlite':
-        connection.connection.create_function("RADIANS", 1, math.radians)
-        # ... SIN, COS, ASIN, SQRT, POWER
-```
-
-## Running Tests
-
-```bash
-cd backend && pytest -v          # ~34 tests
-cd backend && ruff check .       # Linting
-```
-
-Key test highlights:
-- `test_performance.py` — **proves** the 2-3 query target with `CaptureQueriesContext`
-- `test_views.py` — verifies distance sort using real Guatemala City GPS coordinates
-- `test_permissions.py` — tests exact role matching (case-sensitive) and real BasicAuth flow
-
-### Why ReadOnlyModelViewSet?
-
-The spec says "Use Viewsets for managing CRUD operations" but only defines a list/query
-API. `ReadOnlyModelViewSet` provides `list()` and `retrieve()` — exactly what's needed.
-Using a full `ModelViewSet` would expose create/update/delete endpoints that aren't
-specified and would need additional permission logic.
-
-## Bonus SQL: Trips > 1 Hour by Month and Driver
-
-```bash
-make bonus-sql    # Runs the query against Docker MySQL
-```
-
-Full query: [`backend/sql/bonus_report.sql`](backend/sql/bonus_report.sql)
-
-**Edge cases handled:**
-- Rides with multiple pickup/dropoff events: uses `MIN(pickup)` / `MAX(dropoff)`
-- Boundary: strictly `> 60 minutes` (a 60-minute trip is NOT counted)
-- Driver name format: `CONCAT(first_name, ' ', LEFT(last_name, 1))` matches sample output
-
-## What I'd Change for Production
-
-1. **Spatial index** — `SPATIAL INDEX` on a `POINT` column for O(log n) distance queries
-2. **Cursor pagination** — eliminates the COUNT query for faster responses on large tables
-3. **Token/JWT auth** — stateless authentication for API consumers
-4. **Redis caching** — cache ride list with TTL, invalidate on writes
-5. **Read replica** — route list queries to a replica for horizontal read scaling
-6. **Connection pooling** — `django-db-connection-pool` for MySQL connection reuse
-7. **Rate limiting** — protect the API from abuse (DRF throttling or nginx level)
+Same origin for frontend and API — no CORS. nginx replaces the previous
+port 80 → 8000 shortcut. The gunicorn systemd service is untouched.
 
 ## Project Structure
 
 ```
-├── backend/
-│   ├── rides/              # Models, views, serializers, permissions
-│   ├── tests/              # pytest suite (~34 tests)
-│   ├── sql/       # SQL: schema, seed data, bonus report
-│   ├── wingz/              # Django project settings
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/
-│   ├── src/components/     # React components
-│   ├── Dockerfile          # Multi-stage: npm build → nginx
-│   └── nginx.conf          # Reverse proxy /api/ → backend
-├── docs/artifacts/         # Phase 0 analysis and specs
-├── docker-compose.yml
-├── Makefile
-└── README.md
+ride1/
+├── src/
+│   ├── components/
+│   │   ├── RideTable.jsx    # Ride rows with status badges
+│   │   └── Pagination.jsx   # Prev/Next controls
+│   ├── services/
+│   │   └── api.js           # fetchRides() with Basic Auth
+│   ├── App.jsx              # Orchestrator with inline filters
+│   ├── App.css              # Functional styles
+│   └── main.jsx
+├── deploy/
+│   └── nginx-wingz.conf     # nginx site config shipped to EC2
+├── .github/workflows/
+│   └── deploy.yaml          # Build on CI, ship dist/ via SSH
+├── .env.example
+├── vite.config.js
+└── package.json
 ```
 
-## Development Approach
+## Deployment
 
-This project was built using a **structured AI-assisted development workflow**:
+The frontend deploys to the **same EC2 instance** that runs the ride0 backend.
+`nginx` serves the static build on port 80 and reverse-proxies `/api/` to the
+`gunicorn` service already listening on `127.0.0.1:8000`.
 
-1. **Phase 0 — Analysis:** Generated implementation-ready specs under `docs/artifacts/`
-   (data models, API contracts, query strategies, test scenarios) before writing any code.
-2. **Phase 1 — Backend TDD:** Each module was implemented test-first, consuming the
-   Phase 0 artifacts as the single source of truth.
-3. **Phase 2 — Integration:** Docker orchestration, frontend, documentation.
+On every push to `main`, GitHub Actions:
 
-The artifacts in `docs/artifacts/` demonstrate how I approach AI-assisted development:
-specifications first, then methodical implementation — ensuring the AI operates from
-well-defined constraints rather than open-ended prompts.
+1. Runs `npm ci && npm run lint && npm run build`
+2. SCPs `dist/` and `deploy/nginx-wingz.conf` to the EC2 host
+3. Installs nginx if missing (one-time, idempotent)
+4. Swaps in the new build at `/home/ec2-user/production/ride1/dist/`
+5. Copies the nginx config to `/etc/nginx/conf.d/wingz.conf` and reloads
+6. Smoke-tests both the root path and a proxied API call
 
-## Troubleshooting
+The `wingz-api.service` systemd unit is never touched — nginx simply sits in
+front of it.
 
-| Problem | Solution |
-|---------|----------|
-| MySQL not ready | `docker compose logs db` — wait for "ready for connections" |
-| Schema not loaded | Init scripts run only once. Reset: `docker compose down -v` |
-| Frontend 502 | Backend still starting — wait 10s |
-| Tests fail on math | SQLite math fixtures registered in `conftest.py` (autouse) |
-| Permission denied on API | Need admin user with `role='admin'` exactly |
+## Authentication
+
+The backend uses HTTP Basic Auth with admin role. Seed credentials come from
+`ride0/backend/rides/management/commands/seed_db.py`:
+
+- Email: `admin@wingz.com`
+- Password: `adminpass123`
+
+These are injected into the bundle via `VITE_*` env vars. **This is an
+assessment convenience** — `VITE_*` variables are inlined into the client
+bundle at build time, so anyone inspecting the JS can read them. A production
+frontend would implement a real login flow against a token endpoint.
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start Vite dev server on port 5173 |
+| `npm run build` | Build production bundle to `dist/` |
+| `npm run preview` | Preview the production build |
+| `npm run lint` | Run ESLint (from Vite template) |
+
+## What I'd Change for Production
+
+1. **Real auth flow** — login form → token endpoint → httpOnly cookie or secure storage
+2. **Request caching** — React Query or SWR to dedupe, cache, and revalidate
+3. **Debounced filter input** — avoid a request on every keystroke for rider_email
+4. **URL state** — sync filters and page to query string for shareable links
+5. **Error boundaries** — graceful recovery from unexpected API shape changes
+6. **Type safety** — TypeScript with generated types from the DRF schema
+7. **Accessibility pass** — keyboard nav, ARIA labels, focus management
 ```
-
-### `backend/README.md`
-Shorter developer-focused README:
-- Local dev setup (venv, pip install, pytest)
-- Environment variables
-- API endpoint with all params
-- Performance notes
-- Linting with ruff
-
-### `frontend/README.md`
-Brief:
-- `npm install && npm run dev`
-- Component list
-- Vite proxy for dev, nginx for production
 
 **COMMIT.**
 
 ---
 
-## Step 4: Makefile + Final Cleanup
+## Verification
 
-**Include in the README commit: "docs: comprehensive README with architecture decisions and Makefile"**
-
-### `Makefile` (project root)
-```makefile
-.PHONY: test lint up down logs restart seed-check bonus-sql clean
-
-test:
-	cd backend && pytest -v
-
-lint:
-	cd backend && ruff check .
-
-up:
-	docker compose up -d
-
-down:
-	docker compose down
-
-restart:
-	docker compose down && docker compose up -d
-
-logs:
-	docker compose logs -f
-
-seed-check:
-	docker compose exec db mysql -u appuser -papppass wingz_db \
-		-e "SELECT COUNT(*) AS rides FROM rides; \
-		    SELECT COUNT(*) AS events FROM ride_events; \
-		    SELECT COUNT(*) AS users FROM users;"
-
-bonus-sql:
-	docker compose exec db mysql -u appuser -papppass wingz_db \
-		< backend/sql/bonus_report.sql
-
-clean:
-	docker compose down -v
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-```
-
-### `.env.example` (project root)
-```env
-MYSQL_ROOT_PASSWORD=rootpass
-MYSQL_DATABASE=wingz_db
-MYSQL_USER=appuser
-MYSQL_PASSWORD=apppass
-DB_HOST=db
-DB_PORT=3306
-DB_USER=appuser
-DB_PASSWORD=apppass
-DB_NAME=wingz_db
-```
-
-**This is part of the README commit — do not make a separate commit.**
-
----
-
-## Integration Verification
-
-Run the full stack and verify everything:
+Run the full proof cycle before declaring done:
 
 ```bash
-# Build and start
-docker compose up -d --build
+cd /home/jl2/work/wingz/ride1
 
-# Wait for MySQL
-sleep 30
+# Lint (uses ESLint config from Vite template)
+npm run lint
 
-# Verify all services running
-docker compose ps
+# Production build must succeed with zero warnings
+npm run build
 
-# Test API (BasicAuth: admin@wingz.com / adminpass123)
-curl -s -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/ | python3 -m json.tool
-curl -s -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?status=pickup" | python3 -m json.tool
-curl -s -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?sort_by=pickup_time" | python3 -m json.tool
-curl -s -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?sort_by=distance&latitude=14.6&longitude=-90.5" | python3 -m json.tool
-curl -s -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?page=1&page_size=5" | python3 -m json.tool
-
-# Test frontend (auth is hardcoded in frontend for this assessment)
-curl -s http://localhost:8080/ | head -5
-curl -s -u admin@wingz.com:adminpass123 http://localhost:8080/api/rides/ | python3 -m json.tool
-
-# Test seed data
-make seed-check
-
-# Test bonus SQL
-make bonus-sql
-
-# Run backend tests
-make test
-make lint
+# Dev server smoke test
+npm run dev
+# Manually verify in browser:
+#   - Table loads 10 rows (page 1 of 3)
+#   - Status=pickup → 8 rows, 1 page
+#   - Rider email filter → 8 rows
+#   - Sort by pickup_time → rows reorder
+#   - Prev/Next walks through pages
+#   - Invalid filter → error state renders, not a blank page
 ```
 
----
-
-## Final Git Log
+### Against the deployed backend (pre-deploy)
 
 ```bash
-git log --oneline
+# Point the dev server at the live EC2 backend to sanity-check CORS, auth,
+# and response shape BEFORE shipping anything to EC2.
+echo 'VITE_API_BASE_URL=http://107.23.122.99' > .env.local
+npm run dev
+# Re-run all manual checks above
 ```
 
-Expected (~15 commits total):
-```
- docs: comprehensive README with architecture decisions and Makefile
- frontend: React app with ride list, filters, pagination
- docker: Compose + backend Dockerfile + healthchecks
- bonus: raw SQL for trips > 1hr with edge case handling
- perf: assertNumQueries tests proving 2-3 query target
- sorting: pickup_time and Haversine distance with DB-level sort
- api: ride list endpoint with pagination and filtering
- serializers: nested rider/driver + todays_ride_events
- auth: admin-only permission class + BasicAuth with tests
- schema: MySQL DDL + intentional seed data for edge cases
- models: User, Ride, RideEvent with custom PKs matching spec
- scaffold: Django project + rides app + test config
- docs: implementation specs and feature artifacts
- init: project structure, conventions, and architecture decisions
+### Post-deploy (end-to-end on EC2)
+
+```bash
+# Frontend should return the SPA shell
+curl -sf http://107.23.122.99/ | grep -q '<div id="root">' && echo "SPA OK"
+
+# API should be reachable through the nginx proxy (same origin, no :8000)
+curl -sf -u admin@wingz.com:adminpass123 http://107.23.122.99/api/rides/ | jq '.count'
+
+# Full regression against the ride0 validation script
+bash /home/jl2/work/wingz/ride0/tests/test_deployed_api.sh http://107.23.122.99
 ```
 
-**~15 commits telling a complete story** from analysis → foundation → core features → optimization → infrastructure → documentation.
+If the ride0 validation script fails after the nginx cutover, the reverse proxy is misbehaving — do **not** patch ride0 to "fix" it. Debug nginx instead (`sudo nginx -t`, `sudo tail /var/log/nginx/error.log`).
 
 ---
 
 ## Submission Checklist
 
 ### Functionality
-- [ ] `GET /api/rides/` returns paginated rides with nested rider, driver, todays_ride_events
-- [ ] Filter by status works
-- [ ] Filter by rider_email works
-- [ ] Sort by pickup_time works
-- [ ] Sort by distance works (with coordinates)
-- [ ] Distance sort without coords → 400
-- [ ] BasicAuth with admin credentials works: `curl -u admin@wingz.com:adminpass123`
-- [ ] Admin gets 200, non-admin gets 403, unauthenticated gets 401
-- [ ] Pagination works correctly
+- [ ] Ride list loads on page open
+- [ ] Status filter works for all three values
+- [ ] Rider email filter works (exact match)
+- [ ] Sort by pickup_time reorders results
+- [ ] Pagination Prev/Next works, disabled at boundaries
+- [ ] Error state renders a readable message (not a blank page)
+- [ ] Loading state visible between requests
 
-### Performance
-- [ ] ≤ 3 DB queries for ride list (proven by test)
-- [ ] No N+1 queries (proven by test)
-- [ ] Prefetch filters on created_at (proven by SQL inspection test)
-- [ ] Distance sort happens in DB, not Python
+### Code quality
+- [ ] `npm run lint` → 0 errors
+- [ ] `npm run build` → 0 warnings
+- [ ] Components in separate files under `src/components/`
+- [ ] No unused Vite template leftovers (logos, default CSS, counter demo)
+- [ ] Comments only on non-obvious decisions
 
-### Code Quality
-- [ ] `ruff check .` → 0 errors
-- [ ] Models, serializers, views, permissions in separate modules
-- [ ] Comments only on non-obvious "why" decisions
-- [ ] No over-engineering
+### UX
+- [ ] Status badges color-coded and readable
+- [ ] Filter bar visually grouped
+- [ ] Table doesn't overflow on 1280px viewport
+- [ ] Empty state has helpful copy
 
-### Testing
-- [ ] ~36 tests, all passing
-- [ ] Performance tests prove query count
-- [ ] Distance sort tested with real coordinates
-- [ ] Auth tested for exact role matching and BasicAuth flow
-
-### Docker
-- [ ] `docker compose up` starts all 3 services
-- [ ] MySQL healthcheck gates backend startup
-- [ ] Schema + seed data load automatically
-- [ ] Frontend proxies /api/ to backend
+### Deployment
+- [ ] `deploy/nginx-wingz.conf` committed and documented
+- [ ] `.github/workflows/deploy.yaml` builds on CI (not on EC2) and ships `dist/`
+- [ ] `EC2_HOST_PROD` and `EC2_SSH_KEY` secrets added to the ride1 repo
+- [ ] Pre-flight EC2 state investigation completed and approved before cutover
+- [ ] Stale iptables PREROUTING rule removed as part of deploy
+- [ ] nginx serves `http://107.23.122.99/` (frontend) and `/api/` (proxied)
+- [ ] `ride0/tests/test_deployed_api.sh http://107.23.122.99` still passes post-cutover
+- [ ] `wingz-api.service` systemd unit is unchanged (confirm with `systemctl cat wingz-api`)
 
 ### Documentation
 - [ ] README has Quick Start (< 4 commands)
-- [ ] README has Architecture section with diagram
-- [ ] README has Design Decisions (performance, Haversine, auth)
-- [ ] README has "What I'd Change for Production"
-- [ ] README has Bonus SQL with edge case explanation
-- [ ] README has "Development Approach" section referencing AI-assisted workflow
-- [ ] Commit history tells a progression story
+- [ ] README explains env var config and deployed URL override
+- [ ] README notes the Basic Auth credential tradeoff
+- [ ] README has both dev and production architecture diagrams
+- [ ] README has a Deployment section describing the nginx + CI flow
+- [ ] README includes "What I'd Change for Production"
 
-### Bonus
-- [ ] SQL query runs: `make bonus-sql`
-- [ ] Handles multiple events per ride (MIN/MAX)
-- [ ] Boundary: exactly 60 min NOT counted
-- [ ] Output format matches sample
+### Git
+- [ ] `ride1/` is its own repo (not nested in ride0's git history)
+- [ ] 5–6 atomic commits with clear messages
+- [ ] `.env.local` is gitignored
+- [ ] `node_modules/` and `dist/` are gitignored
+
+---
+
+## Constraints
+
+- **Do not modify ride0 source.** Read-only reference for the API contract and credentials.
+- **Do not touch the `wingz-api.service` systemd unit.** nginx sits in front of it; gunicorn stays exactly as ride0 deployed it.
+- **Do not modify ride0's deploy workflow.** The new `.github/workflows/deploy.yaml` lives in the ride1 repo only.
+- **Do not scaffold a full design system.** No Tailwind, no Material UI, no styled-components. Plain CSS is sufficient and faster.
+- **Do not add state management libraries.** `useState` + `useEffect` is enough for this scope.
+- **Do not add TypeScript.** The assessment is about full-stack judgment, not type gymnastics. Call TS out as a production improvement in the README instead.
+- **Do not run destructive EC2 commands without the pre-flight check.** SSH in, report state, wait for approval, then proceed.
+- **If something fails and you're tempted to work around it, STOP and ask.** Do not silently mock the API, fake data, disable a failing check, or bypass nginx.
