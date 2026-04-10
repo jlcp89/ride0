@@ -22,3 +22,9 @@ Debugging insights, environment quirks, and dependency gotchas that survive acro
 ### PyMySQL + cryptography
 - `pymysql` requires `cryptography` package for MySQL 8.0 authentication
 - Both pinned in `requirements.txt`
+
+### Deploy workflow missing seed data
+- **Context**: Deployed API returned "Invalid credentials" for all requests
+- **Problem**: `deploy.yaml` ran `migrate` but never loaded seed data — tables were empty
+- **Solution**: Created `seed_db` management command (ORM-based, idempotent) and added `python manage.py seed_db` after migrate in both dev/prod deploy jobs
+- **Prevention**: Any new data requirements need a corresponding seed command update, not just SQL file changes

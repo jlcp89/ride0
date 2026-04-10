@@ -17,3 +17,7 @@ db_data/
 htmlcov/
 *.log
 docs/prompts/
+CLAUDE.local.md
+*.sqlite3
+.ruff_cache/
+graphify-out/
