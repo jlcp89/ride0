@@ -56,35 +56,41 @@ jobs:
             git clone --depth 1 --branch ${{ github.event.pull_request.head.ref }} --single-branch \
               https://${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git wingz-ride0
             cd wingz-ride0/backend
-            echo "Installing Python dependencies..."
-            python3 -m venv .venv
+            echo "Setting up Python virtual environment..."
+            python3.11 -m venv .venv
             source .venv/bin/activate
             pip install -r requirements.txt
             echo "Running migrations..."
-            python manage.py migrate
+            USE_SQLITE=1 python manage.py migrate
             echo "Stopping service before replacing app..."
             sudo systemctl stop wingz-api || true
             echo "Copying app to production folder..."
+            sudo rm -rf /home/ec2-user/production/wingz
             sudo mkdir -p /home/ec2-user/production/wingz
             sudo cp -r . /home/ec2-user/production/wingz/
-            echo "Setting proper ownership..."
             sudo chown -R ec2-user:ec2-user /home/ec2-user/production
-            echo "Configuring environment variables..."
-            sudo mkdir -p /etc/systemd/system/wingz-api.service.d
-            sudo tee /etc/systemd/system/wingz-api.service.d/env.conf > /dev/null <<EOF
+            echo "Creating systemd service..."
+            sudo tee /etc/systemd/system/wingz-api.service > /dev/null <<EOF
+            [Unit]
+            Description=Wingz Ride API
+            After=network.target
+
             [Service]
+            User=ec2-user
+            WorkingDirectory=/home/ec2-user/production/wingz
+            Environment="USE_SQLITE=1"
             Environment="DJANGO_DEBUG=False"
             Environment="DJANGO_ALLOWED_HOSTS=${{ secrets.EC2_HOST_DEV }}"
             Environment="DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}"
-            Environment="DB_NAME=${{ secrets.DB_NAME }}"
-            Environment="DB_USER=${{ secrets.DB_USER }}"
-            Environment="DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
-            Environment="DB_HOST=${{ secrets.DB_HOST }}"
-            Environment="DB_PORT=3306"
+            ExecStart=/home/ec2-user/production/wingz/.venv/bin/gunicorn --bind 0.0.0.0:8000 --workers 2 wingz.wsgi:application
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
             EOF
-            sudo chmod 600 /etc/systemd/system/wingz-api.service.d/env.conf
-            echo "Reloading systemd and starting service..."
+            echo "Starting service..."
             sudo systemctl daemon-reload
+            sudo systemctl enable wingz-api
             sudo systemctl start wingz-api
             sleep 2
             curl -sf http://localhost:8000/api/rides/ -o /dev/null -w "%{http_code}" || echo "WARNING: Health check failed"
@@ -117,35 +123,41 @@ jobs:
             git clone --depth 1 --branch main --single-branch \
               https://${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git wingz-ride0
             cd wingz-ride0/backend
-            echo "Installing Python dependencies..."
-            python3 -m venv .venv
+            echo "Setting up Python virtual environment..."
+            python3.11 -m venv .venv
             source .venv/bin/activate
             pip install -r requirements.txt
             echo "Running migrations..."
-            python manage.py migrate
+            USE_SQLITE=1 python manage.py migrate
             echo "Stopping service before replacing app..."
             sudo systemctl stop wingz-api || true
             echo "Copying app to production folder..."
+            sudo rm -rf /home/ec2-user/production/wingz
             sudo mkdir -p /home/ec2-user/production/wingz
             sudo cp -r . /home/ec2-user/production/wingz/
-            echo "Setting proper ownership..."
             sudo chown -R ec2-user:ec2-user /home/ec2-user/production
-            echo "Configuring environment variables..."
-            sudo mkdir -p /etc/systemd/system/wingz-api.service.d
-            sudo tee /etc/systemd/system/wingz-api.service.d/env.conf > /dev/null <<EOF
+            echo "Creating systemd service..."
+            sudo tee /etc/systemd/system/wingz-api.service > /dev/null <<EOF
+            [Unit]
+            Description=Wingz Ride API
+            After=network.target
+
             [Service]
+            User=ec2-user
+            WorkingDirectory=/home/ec2-user/production/wingz
+            Environment="USE_SQLITE=1"
             Environment="DJANGO_DEBUG=False"
             Environment="DJANGO_ALLOWED_HOSTS=${{ secrets.EC2_HOST_PROD }}"
             Environment="DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}"
-            Environment="DB_NAME=${{ secrets.DB_NAME }}"
-            Environment="DB_USER=${{ secrets.DB_USER }}"
-            Environment="DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
-            Environment="DB_HOST=${{ secrets.DB_HOST }}"
-            Environment="DB_PORT=3306"
+            ExecStart=/home/ec2-user/production/wingz/.venv/bin/gunicorn --bind 0.0.0.0:8000 --workers 2 wingz.wsgi:application
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
             EOF
-            sudo chmod 600 /etc/systemd/system/wingz-api.service.d/env.conf
-            echo "Reloading systemd and starting service..."
+            echo "Starting service..."
             sudo systemctl daemon-reload
+            sudo systemctl enable wingz-api
             sudo systemctl start wingz-api
             sleep 2
             curl -sf http://localhost:8000/api/rides/ -o /dev/null -w "%{http_code}" || echo "WARNING: Health check failed"
