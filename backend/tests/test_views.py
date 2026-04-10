@@ -1,4 +1,6 @@
 import pytest
+from datetime import timedelta
+from django.utils import timezone
 
 
 @pytest.mark.django_db
@@ -80,3 +82,59 @@ class TestRideList:
         assert response.status_code == 200
         assert response.data["count"] == 1
         assert response.data["results"][0]["status"] == "pickup"
+
+    def test_sort_by_pickup_time(self, admin_client, make_ride):
+        """T-008: Rides ordered by pickup_time ascending."""
+        now = timezone.now()
+        make_ride(pickup_time=now + timedelta(hours=3))
+        make_ride(pickup_time=now + timedelta(hours=1))
+        make_ride(pickup_time=now + timedelta(hours=2))
+        response = admin_client.get("/api/rides/?sort_by=pickup_time")
+        assert response.status_code == 200
+        times = [r["pickup_time"] for r in response.data["results"]]
+        assert times == sorted(times)
+
+    def test_sort_by_distance_nearest_first(self, admin_client, make_ride):
+        """T-009: Zone 10 (~0km) first, Zone 14 (~3.5km) mid, Antigua (~25km) last."""
+        make_ride(pickup_lat=14.5586, pickup_lng=-90.7295)  # Antigua ~25km
+        make_ride(pickup_lat=14.5880, pickup_lng=-90.4800)  # Zone 14 ~3.5km
+        make_ride(pickup_lat=14.5995, pickup_lng=-90.5131)  # Zone 10 ~0km
+        response = admin_client.get(
+            "/api/rides/?sort_by=distance&latitude=14.5995&longitude=-90.5131"
+        )
+        assert response.status_code == 200
+        lats = [r["pickup_latitude"] for r in response.data["results"]]
+        assert abs(lats[0] - 14.5995) < 0.01  # Zone 10 first
+        assert abs(lats[1] - 14.5880) < 0.01  # Zone 14 second
+        assert abs(lats[2] - 14.5586) < 0.01  # Antigua last
+
+    def test_distance_sort_missing_coords_returns_400(self, admin_client):
+        """T-010: sort_by=distance without lat/lng → 400."""
+        response = admin_client.get("/api/rides/?sort_by=distance")
+        assert response.status_code == 400
+        assert "latitude" in response.data["error"]
+
+    def test_distance_sort_with_pagination(self, admin_client, make_ride):
+        """T-011: Distance sort + pagination returns correct page."""
+        for i in range(5):
+            make_ride(pickup_lat=14.5995 + i * 0.01, pickup_lng=-90.5131)
+        response = admin_client.get(
+            "/api/rides/?sort_by=distance&latitude=14.5995&longitude=-90.5131&page_size=3"
+        )
+        assert response.status_code == 200
+        assert len(response.data["results"]) == 3
+        assert response.data["count"] == 5
+
+    def test_filter_plus_distance_sort(self, admin_client, make_ride):
+        """T-012: Filter + sort compose correctly."""
+        make_ride(status="pickup", pickup_lat=14.5586, pickup_lng=-90.7295)
+        make_ride(status="pickup", pickup_lat=14.5995, pickup_lng=-90.5131)
+        make_ride(status="dropoff", pickup_lat=14.5880, pickup_lng=-90.4800)
+        response = admin_client.get(
+            "/api/rides/?status=pickup&sort_by=distance"
+            "&latitude=14.5995&longitude=-90.5131"
+        )
+        assert response.status_code == 200
+        assert response.data["count"] == 2
+        for r in response.data["results"]:
+            assert r["status"] == "pickup"

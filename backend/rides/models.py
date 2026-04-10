@@ -40,6 +40,7 @@ class Ride(models.Model):
 
     class Meta:
         db_table = "rides"
+        ordering = ["id_ride"]
 
     def __str__(self):
         return f"Ride {self.id_ride} ({self.status})"
