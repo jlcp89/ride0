@@ -1,0 +1,78 @@
+# Implementation plan: phased approach with clear dependencies
+# Each phase produces concrete artifacts consumed by the next
+
+phases:
+  - phase: 0
+    name: "Analysis & Foundation"
+    description: "Generate artifacts, set up repo, establish conventions"
+    commits:
+      - "init: project structure, conventions, and architecture decisions"
+      - "docs: implementation specs and feature artifacts"
+
+  - phase: 1
+    name: "Backend TDD"
+    depends_on: [0]
+    description: "Models → Auth → Serializers → Views (list, filter, sort) → Perf tests → Bonus SQL"
+    features:
+      - name: Database Schema & Models
+        description: "User, Ride, RideEvent models with custom PKs matching spec table definitions"
+        criteria: [Functionality, Code Quality]
+
+      - name: Authentication
+        description: "Custom BasicAuth + admin-only permission checking user.role == 'admin'"
+        criteria: [Functionality, Error Handling]
+
+      - name: Ride List API
+        description: "GET /api/rides/ — paginated, nested rider/driver/events, filter by status/rider_email"
+        criteria: [Functionality]
+
+      - name: Sorting
+        description: "Sort by pickup_time (DB ORDER BY) and distance (Haversine RawSQL annotation)"
+        criteria: [Functionality, Performance]
+        notes: "Must sort in DB for large tables. Must work with pagination."
+
+      - name: Performance Optimization
+        description: "todays_ride_events via Prefetch (last 24h only), 2-3 queries total, assertNumQueries tests"
+        criteria: [Performance]
+        notes: "Verified by assertNumQueries tests"
+
+      - name: Bonus SQL
+        description: "Raw SQL for trips > 1 hour by month and driver"
+        criteria: [Functionality]
+        notes: "Most candidates skip this. We won't."
+
+    commits:
+      - "scaffold: Django project + rides app + test config"
+      - "models: User, Ride, RideEvent with custom PKs matching spec"
+      - "schema: MySQL DDL + intentional seed data for edge cases"
+      - "auth: admin-only permission class + BasicAuth with tests"
+      - "serializers: nested rider/driver + todays_ride_events"
+      - "api: ride list endpoint with pagination and filtering"
+      - "sorting: pickup_time and Haversine distance with DB-level sort"
+      - "perf: assertNumQueries tests proving 2-3 query target"
+      - "bonus: raw SQL for trips > 1hr with edge case handling"
+      - "docker: backend Dockerfile"
+
+  - phase: 2
+    name: "Frontend + Docker + Docs"
+    depends_on: [1]
+    description: "Docker Compose → Frontend → README → Makefile"
+    features:
+      - name: Docker Orchestration
+        description: "Docker Compose with MySQL, backend, frontend + healthchecks"
+        criteria: [Functionality]
+
+      - name: Frontend
+        description: "React admin dashboard — functional, clean, demonstrates the API"
+        criteria: [Functionality]
+        notes: "Assessment doesn't require frontend. Keep it minimal — backend is the priority."
+
+      - name: Documentation
+        description: "README with architecture decisions, tradeoffs, production considerations"
+        criteria: [Code Quality]
+        notes: "This is the #1 differentiator. README must read like a senior engineer's arch doc."
+
+    commits:
+      - "docker: Compose + backend Dockerfile + healthchecks"
+      - "frontend: React app with ride list, filters, pagination"
+      - "docs: comprehensive README with architecture decisions and Makefile"

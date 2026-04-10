@@ -1,0 +1,83 @@
+models:
+  - name: User
+    django_class: User
+    table: users
+    fields:
+      - name: id_user
+        type: INT AUTO_INCREMENT
+        django: AutoField(primary_key=True)
+        description: "Custom PK — not Django's default 'id'"
+      - name: role
+        type: VARCHAR(50)
+        django: CharField(max_length=50)
+        description: "'admin', 'driver', 'rider', etc."
+      - name: first_name
+        type: VARCHAR(100)
+        django: CharField(max_length=100)
+      - name: last_name
+        type: VARCHAR(100)
+        django: CharField(max_length=100)
+      - name: email
+        type: VARCHAR(255)
+        django: CharField(max_length=255)
+      - name: phone_number
+        type: VARCHAR(50)
+        django: CharField(max_length=50)
+      - name: password
+        type: VARCHAR(128)
+        django: CharField(max_length=128)
+        description: "Added beyond spec §5 to support authentication §2. Not in the original table definition. Hashed via make_password(), verified via check_password()."
+
+  - name: Ride
+    django_class: Ride
+    table: rides
+    fields:
+      - name: id_ride
+        type: INT AUTO_INCREMENT
+        django: AutoField(primary_key=True)
+      - name: status
+        type: VARCHAR(50)
+        django: CharField(max_length=50)
+        description: "'en-route', 'pickup', 'dropoff'"
+      - name: id_rider
+        type: INT FK → users.id_user
+        django: "ForeignKey(User, on_delete=CASCADE, related_name='rides_as_rider', db_column='id_rider')"
+      - name: id_driver
+        type: INT FK → users.id_user
+        django: "ForeignKey(User, on_delete=CASCADE, related_name='rides_as_driver', db_column='id_driver')"
+      - name: pickup_latitude
+        type: FLOAT
+        django: FloatField()
+      - name: pickup_longitude
+        type: FLOAT
+        django: FloatField()
+      - name: dropoff_latitude
+        type: FLOAT
+        django: FloatField()
+      - name: dropoff_longitude
+        type: FLOAT
+        django: FloatField()
+      - name: pickup_time
+        type: DATETIME
+        django: DateTimeField()
+
+  - name: RideEvent
+    django_class: RideEvent
+    table: ride_events
+    fields:
+      - name: id_ride_event
+        type: INT AUTO_INCREMENT
+        django: AutoField(primary_key=True)
+      - name: id_ride
+        type: INT FK → rides.id_ride
+        django: "ForeignKey(Ride, on_delete=CASCADE, related_name='ride_events', db_column='id_ride')"
+      - name: description
+        type: VARCHAR(255)
+        django: CharField(max_length=255)
+      - name: created_at
+        type: DATETIME
+        django: DateTimeField()
+    indexes:
+      - fields: [created_at]
+        name: idx_rideevent_created
+        reason: "Performance — filtered Prefetch for todays_ride_events"
