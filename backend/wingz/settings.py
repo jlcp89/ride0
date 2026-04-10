@@ -1,6 +1,8 @@
 import os
 import sys
 
+from django.core.exceptions import ImproperlyConfigured
+
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
     'django-insecure-dev-key-change-in-production',
@@ -9,6 +11,23 @@ SECRET_KEY = os.environ.get(
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
+
+# JWT auth — HS256 signed with JWT_SECRET_KEY. Separate from DJANGO_SECRET_KEY
+# so rotating one does not invalidate the other. In dev it falls back to the
+# Django SECRET_KEY so local runs and tests do not require extra env setup.
+JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or SECRET_KEY
+JWT_ALGORITHM = 'HS256'
+JWT_ACCESS_TOKEN_LIFETIME_MINUTES = int(
+    os.environ.get('JWT_ACCESS_TOKEN_LIFETIME_MINUTES', '15')
+)
+JWT_REFRESH_TOKEN_LIFETIME_DAYS = int(
+    os.environ.get('JWT_REFRESH_TOKEN_LIFETIME_DAYS', '7')
+)
+
+if not JWT_SECRET_KEY:
+    raise ImproperlyConfigured(
+        'JWT_SECRET_KEY (or DJANGO_SECRET_KEY fallback) must be set.'
+    )
 
 INSTALLED_APPS = [
     'django.contrib.contenttypes',
@@ -23,7 +42,7 @@ MIDDLEWARE = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rides.authentication.EmailBasicAuthentication',
+        'rides.authentication.JWTAuthentication',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rides.pagination.StandardPagination',
     'PAGE_SIZE': 10,

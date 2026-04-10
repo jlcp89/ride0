@@ -3,16 +3,28 @@
 # Wingz Ride API — Deployed Endpoint Validation
 # Usage: bash tests/test_deployed_api.sh [BASE_URL]
 # Requires: curl, jq
+#
+# Auth: the API is Bearer-only. Pre-flight POSTs /api/auth/login/ with the
+# seed admin, rider, and driver accounts and stores the returned access tokens
+# in ADMIN_TOKEN / RIDER_TOKEN / DRIVER_TOKEN, which are then sent via
+# "Authorization: Bearer ..." on every subsequent request.
 # =============================================================================
 set -euo pipefail
 
 BASE_URL="${1:-http://107.23.122.99}"
 ENDPOINT="${BASE_URL}/api/rides/"
+LOGIN_URL="${BASE_URL}/api/auth/login/"
 
-ADMIN_AUTH="admin@wingz.com:adminpass123"
-ADMIN_B64="YWRtaW5Ad2luZ3ouY29tOmFkbWlucGFzczEyMw=="
-RIDER_AUTH="alice@wingz.com:driverpass123"
-DRIVER_AUTH="chris@wingz.com:driverpass123"
+ADMIN_EMAIL="admin@wingz.com"
+ADMIN_PASSWORD="adminpass123"
+RIDER_EMAIL="alice@wingz.com"
+RIDER_PASSWORD="driverpass123"
+DRIVER_EMAIL="chris@wingz.com"
+DRIVER_PASSWORD="driverpass123"
+
+ADMIN_TOKEN=""
+RIDER_TOKEN=""
+DRIVER_TOKEN=""
 
 PASS=0
 FAIL=0
@@ -46,7 +58,18 @@ fetch() {
 
 fetch_auth() {
     local url="$1"
-    fetch "$url" -u "$ADMIN_AUTH"
+    fetch "$url" -H "Authorization: Bearer $ADMIN_TOKEN"
+}
+
+# POST /api/auth/login/ and echo the access_token (empty string on failure).
+get_token() {
+    local email="$1" password="$2"
+    local body resp
+    body=$(jq -n --arg e "$email" --arg p "$password" '{email:$e, password:$p}')
+    resp=$(curl -s -X POST "$LOGIN_URL" \
+        -H "Content-Type: application/json" \
+        -d "$body")
+    echo "$resp" | jq -r '.access_token // empty'
 }
 
 pass_test() {
@@ -111,10 +134,23 @@ for cmd in curl jq; do
     fi
 done
 
-# Quick connectivity check
-fetch "$ENDPOINT" -u "$ADMIN_AUTH"
+# Quick connectivity check — anonymous GET must return a real HTTP code.
+fetch "$ENDPOINT"
 if [[ "$HTTP_CODE" == "000" ]]; then
     echo "ERROR: Cannot reach $ENDPOINT — check URL and network." >&2
+    exit 2
+fi
+
+# Obtain JWT access tokens for the three seed accounts used in subsequent tests.
+ADMIN_TOKEN=$(get_token "$ADMIN_EMAIL" "$ADMIN_PASSWORD")
+RIDER_TOKEN=$(get_token "$RIDER_EMAIL" "$RIDER_PASSWORD")
+DRIVER_TOKEN=$(get_token "$DRIVER_EMAIL" "$DRIVER_PASSWORD")
+
+if [[ -z "$ADMIN_TOKEN" || -z "$RIDER_TOKEN" || -z "$DRIVER_TOKEN" ]]; then
+    echo "ERROR: Failed to obtain one or more JWT tokens from $LOGIN_URL." >&2
+    echo "       admin=${ADMIN_TOKEN:+ok}${ADMIN_TOKEN:-missing}" >&2
+    echo "       rider=${RIDER_TOKEN:+ok}${RIDER_TOKEN:-missing}" >&2
+    echo "       driver=${DRIVER_TOKEN:+ok}${DRIVER_TOKEN:-missing}" >&2
     exit 2
 fi
 
@@ -124,26 +160,28 @@ fi
 
 printf "${CYAN}${BOLD}[1/7] Authentication & Authorization${NC}\n"
 
-fetch "$ENDPOINT" -u "$ADMIN_AUTH"
-assert_status "AUTH-01" "Admin credentials return 200" "200"
+fetch "$ENDPOINT" -H "Authorization: Bearer $ADMIN_TOKEN"
+assert_status "AUTH-01" "Admin Bearer token returns 200" "200"
 
 fetch "$ENDPOINT"
 assert_status "AUTH-02" "No credentials return 401" "401"
 
-fetch "$ENDPOINT" -u "admin@wingz.com:wrongpassword"
-assert_status "AUTH-03" "Wrong password returns 401" "401"
+fetch "$LOGIN_URL" -X POST -H "Content-Type: application/json" \
+    -d "$(jq -n --arg e "$ADMIN_EMAIL" '{email:$e, password:"wrongpassword"}')"
+assert_status "AUTH-03" "Login with wrong password returns 401" "401"
 
-fetch "$ENDPOINT" -u "$RIDER_AUTH"
-assert_status "AUTH-04" "Rider (non-admin) returns 403" "403"
+fetch "$ENDPOINT" -H "Authorization: Bearer $RIDER_TOKEN"
+assert_status "AUTH-04" "Rider (non-admin) Bearer returns 403" "403"
 
-fetch "$ENDPOINT" -u "$DRIVER_AUTH"
-assert_status "AUTH-05" "Driver (non-admin) returns 403" "403"
+fetch "$ENDPOINT" -H "Authorization: Bearer $DRIVER_TOKEN"
+assert_status "AUTH-05" "Driver (non-admin) Bearer returns 403" "403"
 
-fetch "$ENDPOINT" -u "nobody@wingz.com:whatever"
-assert_status "AUTH-06" "Non-existent email returns 401" "401"
+fetch "$LOGIN_URL" -X POST -H "Content-Type: application/json" \
+    -d '{"email":"nobody@wingz.com","password":"whatever"}'
+assert_status "AUTH-06" "Login with non-existent email returns 401" "401"
 
-fetch "$ENDPOINT" -H "Authorization: Basic $ADMIN_B64"
-assert_status "AUTH-07" "Raw Authorization header works" "200"
+fetch "$ENDPOINT" -H "Authorization: Basic YWRtaW5Ad2luZ3ouY29tOmFkbWlucGFzczEyMw=="
+assert_status "AUTH-07" "Basic Auth header is rejected (Bearer-only)" "401"
 
 # ---------------------------------------------------------------------------
 # 2. Response Structure
@@ -290,7 +328,7 @@ else
     fail_test "SORT-04" "Distance: last result is antigua" "Got lat=$LAST_LAT, expected ~14.5586"
 fi
 
-fetch "${ENDPOINT}?sort_by=distance" -u "$ADMIN_AUTH"
+fetch "${ENDPOINT}?sort_by=distance" -H "Authorization: Bearer $ADMIN_TOKEN"
 assert_status "SORT-05" "Distance without lat/lng returns 400" "400"
 if echo "$BODY" | jq -r '.error' 2>/dev/null | grep -qi "latitude and longitude are required"; then
     pass_test "SORT-05b" "Error message mentions lat/lng required"
@@ -298,7 +336,7 @@ else
     fail_test "SORT-05b" "Error message mentions lat/lng required" "Body: $BODY"
 fi
 
-fetch "${ENDPOINT}?sort_by=distance&latitude=abc&longitude=-90.5131" -u "$ADMIN_AUTH"
+fetch "${ENDPOINT}?sort_by=distance&latitude=abc&longitude=-90.5131" -H "Authorization: Bearer $ADMIN_TOKEN"
 assert_status "SORT-06" "Non-numeric latitude returns 400" "400"
 if echo "$BODY" | jq -r '.error' 2>/dev/null | grep -qi "valid numbers"; then
     pass_test "SORT-06b" "Error message mentions valid numbers"
@@ -306,7 +344,7 @@ else
     fail_test "SORT-06b" "Error message mentions valid numbers" "Body: $BODY"
 fi
 
-fetch "${ENDPOINT}?sort_by=distance&latitude=14.5995" -u "$ADMIN_AUTH"
+fetch "${ENDPOINT}?sort_by=distance&latitude=14.5995" -H "Authorization: Bearer $ADMIN_TOKEN"
 assert_status "SORT-07" "Lat only (no lng) returns 400" "400"
 
 # ---------------------------------------------------------------------------
@@ -368,16 +406,16 @@ fi
 
 printf "\n${CYAN}${BOLD}[7/7] Edge Cases${NC}\n"
 
-fetch "$ENDPOINT" -X POST -u "$ADMIN_AUTH" -H "Content-Type: application/json"
+fetch "$ENDPOINT" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json"
 assert_status "EDGE-01" "POST returns 405 Method Not Allowed" "405"
 
-fetch "$ENDPOINT" -X PUT -u "$ADMIN_AUTH" -H "Content-Type: application/json"
+fetch "$ENDPOINT" -X PUT -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json"
 assert_status "EDGE-02" "PUT returns 405 Method Not Allowed" "405"
 
-fetch "$ENDPOINT" -X DELETE -u "$ADMIN_AUTH"
+fetch "$ENDPOINT" -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN"
 assert_status "EDGE-03" "DELETE returns 405 Method Not Allowed" "405"
 
-fetch "${ENDPOINT}?page=999" -u "$ADMIN_AUTH"
+fetch "${ENDPOINT}?page=999" -H "Authorization: Bearer $ADMIN_TOKEN"
 assert_status "EDGE-04" "Page beyond data returns 404" "404"
 
 # ---------------------------------------------------------------------------

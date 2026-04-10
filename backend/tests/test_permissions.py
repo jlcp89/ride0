@@ -1,27 +1,19 @@
-import base64
 import pytest
 from django.contrib.auth.hashers import make_password
-
-from tests.conftest import ADMIN_PASSWORD
 
 
 @pytest.mark.django_db
 class TestAuthentication:
-    """7 tests from docs/artifacts/features/authentication/test-scenarios.md"""
+    """Permission tests from docs/artifacts/features/authentication/test-scenarios.md.
+
+    Wrong-password and raw-Basic-header cases previously covered by T-002/T-005
+    now live in tests/test_auth.py against the /api/auth/login/ endpoint, which
+    is the only way to obtain credentials after the switch to Bearer-only auth.
+    """
 
     def test_admin_force_auth_gets_200(self, admin_client):
         """T-001: Admin via force_authenticate → 200."""
         response = admin_client.get("/api/rides/")
-        assert response.status_code == 200
-
-    def test_admin_basic_auth_gets_200(self, api_client, admin_user):
-        """T-002: Admin authenticates via HTTP BasicAuth → 200."""
-        credentials = base64.b64encode(
-            f"{admin_user.email}:{ADMIN_PASSWORD}".encode()
-        ).decode()
-        response = api_client.get(
-            "/api/rides/", HTTP_AUTHORIZATION=f"Basic {credentials}"
-        )
         assert response.status_code == 200
 
     def test_non_admin_gets_403(self, api_client, non_admin_user):
@@ -33,16 +25,6 @@ class TestAuthentication:
     def test_unauthenticated_gets_401(self, api_client):
         """T-004: No credentials → 401."""
         response = api_client.get("/api/rides/")
-        assert response.status_code == 401
-
-    def test_wrong_password_gets_401(self, api_client, admin_user):
-        """T-005: Wrong password → 401."""
-        credentials = base64.b64encode(
-            f"{admin_user.email}:wrongpassword".encode()
-        ).decode()
-        response = api_client.get(
-            "/api/rides/", HTTP_AUTHORIZATION=f"Basic {credentials}"
-        )
         assert response.status_code == 401
 
     def test_case_sensitive_role_check(self, api_client, db):

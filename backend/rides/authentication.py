@@ -1,34 +1,36 @@
-import base64
-
+import jwt
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
-from django.contrib.auth.hashers import check_password
 
+from rides.jwt_service import ACCESS_TYPE, decode_token
 from rides.models import User
 
 
-class EmailBasicAuthentication(BaseAuthentication):
+class JWTAuthentication(BaseAuthentication):
     """
-    HTTP Basic Auth against our custom User model.
-    Credentials: email:password (not username:password).
+    Stateless JWT auth. Reads `Authorization: Bearer <token>`, validates the
+    signature + expiry + type claim, and loads the custom `rides.models.User`.
+    Returns None on absent/non-Bearer headers so DRF treats the request as
+    unauthenticated, and on user-not-found so stale tokens for deleted users
+    fall through to the unauthenticated path cleanly.
     """
 
     def authenticate(self, request):
         auth_header = request.META.get("HTTP_AUTHORIZATION", "")
-        if not auth_header.startswith("Basic "):
+        if not auth_header.startswith("Bearer "):
+            return None
+        token = auth_header[7:].strip()
+        if not token:
             return None
         try:
-            decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
-            email, password = decoded.split(":", 1)
-        except (ValueError, UnicodeDecodeError):
-            raise AuthenticationFailed("Invalid basic auth header.")
+            payload = decode_token(token, expected_type=ACCESS_TYPE)
+        except jwt.InvalidTokenError:
+            raise AuthenticationFailed("Invalid or expired token.")
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(id_user=payload["user_id"])
         except User.DoesNotExist:
-            raise AuthenticationFailed("Invalid credentials.")
-        if not check_password(password, user.password):
-            raise AuthenticationFailed("Invalid credentials.")
+            return None
         return (user, None)
 
     def authenticate_header(self, request):
-        return 'Basic realm="api"'
+        return 'Bearer realm="api"'
