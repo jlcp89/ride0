@@ -40,6 +40,13 @@ if 'pytest' in sys.modules:
             'NAME': ':memory:',
         }
     }
+elif os.environ.get('USE_SQLITE'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': os.path.join(os.path.dirname(os.path.dirname(__file__)), 'db.sqlite3'),
+        }
+    }
 else:
     DATABASES = {
         'default': {
