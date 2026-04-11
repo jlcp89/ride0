@@ -158,7 +158,7 @@ fi
 # 1. Authentication & Authorization
 # ---------------------------------------------------------------------------
 
-printf "${CYAN}${BOLD}[1/7] Authentication & Authorization${NC}\n"
+printf "${CYAN}${BOLD}[1/8] Authentication & Authorization${NC}\n"
 
 fetch "$ENDPOINT" -H "Authorization: Bearer $ADMIN_TOKEN"
 assert_status "AUTH-01" "Admin Bearer token returns 200" "200"
@@ -187,7 +187,7 @@ assert_status "AUTH-07" "Basic Auth header is rejected (Bearer-only)" "401"
 # 2. Response Structure
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[2/7] Response Structure${NC}\n"
+printf "\n${CYAN}${BOLD}[2/8] Response Structure${NC}\n"
 
 fetch_auth "$ENDPOINT"
 
@@ -216,7 +216,7 @@ assert_jq "STRUCT-07" "Password NOT in id_driver" \
 # 3. Pagination
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[3/7] Pagination${NC}\n"
+printf "\n${CYAN}${BOLD}[3/8] Pagination${NC}\n"
 
 fetch_auth "$ENDPOINT"
 assert_jq "PAGE-01" "Default page returns 10 items" \
@@ -256,7 +256,7 @@ assert_jq "PAGE-06" "page_size>max capped, returns all 24" \
 # 4. Filtering
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[4/7] Filtering${NC}\n"
+printf "\n${CYAN}${BOLD}[4/8] Filtering${NC}\n"
 
 fetch_auth "${ENDPOINT}?status=to-pickup&page_size=100"
 assert_jq "FILT-01a" "status=to-pickup count is 8" '.count' "8"
@@ -297,7 +297,7 @@ assert_jq "FILT-07b" "Nonexistent email returns count=0" '.count' "0"
 # 5. Sorting
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[5/7] Sorting${NC}\n"
+printf "\n${CYAN}${BOLD}[5/8] Sorting${NC}\n"
 
 fetch_auth "${ENDPOINT}?sort_by=pickup_time&page_size=100"
 SORTED=$(echo "$BODY" | jq '[.results[].pickup_time] | . == sort')
@@ -351,7 +351,7 @@ assert_status "SORT-07" "Lat only (no lng) returns 400" "400"
 # 6. Today's Ride Events
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[6/7] Today's Ride Events${NC}\n"
+printf "\n${CYAN}${BOLD}[6/8] Today's Ride Events${NC}\n"
 
 fetch_auth "${ENDPOINT}?page_size=100"
 
@@ -404,19 +404,66 @@ fi
 # 7. Edge Cases
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[7/7] Edge Cases${NC}\n"
+printf "\n${CYAN}${BOLD}[7/8] Edge Cases${NC}\n"
 
 fetch "$ENDPOINT" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json"
-assert_status "EDGE-01" "POST returns 405 Method Not Allowed" "405"
+assert_status "EDGE-01" "POST with empty body returns 400 Bad Request" "400"
 
 fetch "$ENDPOINT" -X PUT -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json"
-assert_status "EDGE-02" "PUT returns 405 Method Not Allowed" "405"
+assert_status "EDGE-02" "PUT on collection URL returns 405 Method Not Allowed" "405"
 
 fetch "$ENDPOINT" -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN"
-assert_status "EDGE-03" "DELETE returns 405 Method Not Allowed" "405"
+assert_status "EDGE-03" "DELETE on collection URL returns 405 Method Not Allowed" "405"
 
 fetch "${ENDPOINT}?page=999" -H "Authorization: Bearer $ADMIN_TOKEN"
 assert_status "EDGE-04" "Page beyond data returns 404" "404"
+
+# ---------------------------------------------------------------------------
+# 8. CRUD Write Operations (full round-trip)
+# ---------------------------------------------------------------------------
+
+printf "\n${CYAN}${BOLD}[8/8] CRUD Write Operations${NC}\n"
+
+# Discover seed user IDs (avoid hardcoding AUTO_INCREMENT values) so the
+# round-trip works against any seeded instance.
+fetch_auth "${ENDPOINT}?rider_email=alice@example.com&page_size=1"
+ALICE_ID=$(echo "$BODY" | jq -r '.results[0].id_rider.id_user')
+CHRIS_ID=$(echo "$BODY" | jq -r '.results[0].id_driver.id_user // empty')
+if [[ -z "$CHRIS_ID" || "$CHRIS_ID" == "null" ]]; then
+    # Fall back to a different ride's driver if alice's first ride has a
+    # non-chris driver — any valid driver id_user works for the round-trip.
+    fetch_auth "${ENDPOINT}?page_size=1"
+    CHRIS_ID=$(echo "$BODY" | jq -r '.results[0].id_driver.id_user')
+fi
+
+CRUD_BODY=$(jq -n \
+    --argjson rider "$ALICE_ID" \
+    --argjson driver "$CHRIS_ID" \
+    '{status:"to-pickup", id_rider:$rider, id_driver:$driver,
+      pickup_latitude:14.6349, pickup_longitude:-90.5069,
+      dropoff_latitude:14.6407, dropoff_longitude:-90.5133,
+      pickup_time:"2030-01-01T12:00:00Z"}')
+
+fetch "$ENDPOINT" -X POST \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$CRUD_BODY"
+assert_status "CRUD-01" "POST valid body returns 201 Created" "201"
+
+NEW_ID=$(echo "$BODY" | jq -r '.id_ride')
+DETAIL_URL="${BASE_URL}/api/rides/${NEW_ID}/"
+
+fetch "$DETAIL_URL" -X PATCH \
+    -H "Authorization: Bearer $ADMIN_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"status":"en-route"}'
+assert_status "CRUD-02" "PATCH updates status to 200 OK" "200"
+
+fetch "$DETAIL_URL" -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN"
+assert_status "CRUD-03" "DELETE returns 204 No Content" "204"
+
+fetch_auth "$DETAIL_URL"
+assert_status "CRUD-04" "GET deleted ride returns 404" "404"
 
 # ---------------------------------------------------------------------------
 # Summary

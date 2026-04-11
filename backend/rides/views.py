@@ -3,19 +3,21 @@ from datetime import timedelta
 from django.db.models import FloatField, Prefetch
 from django.db.models.expressions import RawSQL
 from django.utils import timezone
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.response import Response
 
 from rides.models import Ride, RideEvent
-from rides.serializers import RideSerializer
-from rides.permissions import IsAdminRole
 from rides.pagination import StandardPagination
+from rides.serializers import RideReadSerializer, RideWriteSerializer
 
 
-class RideViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = RideSerializer
-    permission_classes = [IsAdminRole]
+class RideViewSet(viewsets.ModelViewSet):
     pagination_class = StandardPagination
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return RideWriteSerializer
+        return RideReadSerializer
 
     def get_queryset(self):
         last_24h = timezone.now() - timedelta(hours=24)
@@ -29,9 +31,9 @@ class RideViewSet(viewsets.ReadOnlyModelViewSet):
             .select_related("id_rider", "id_driver")
             .prefetch_related(todays_events)
         )
-        status = self.request.query_params.get("status")
-        if status:
-            qs = qs.filter(status=status)
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            qs = qs.filter(status=status_param)
         rider_email = self.request.query_params.get("rider_email")
         if rider_email:
             qs = qs.filter(id_rider__email=rider_email)
@@ -63,6 +65,45 @@ class RideViewSet(viewsets.ReadOnlyModelViewSet):
                     status=400,
                 )
         return super().list(request, *args, **kwargs)
+
+    def create(self, request, *args, **kwargs):
+        write_serializer = self.get_serializer(data=request.data)
+        write_serializer.is_valid(raise_exception=True)
+        write_serializer.save()
+        instance = self._hydrate(write_serializer.instance.pk)
+        return Response(
+            RideReadSerializer(instance).data, status=status.HTTP_201_CREATED
+        )
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        write_serializer = self.get_serializer(
+            instance, data=request.data, partial=partial
+        )
+        write_serializer.is_valid(raise_exception=True)
+        write_serializer.save()
+        hydrated = self._hydrate(write_serializer.instance.pk)
+        return Response(RideReadSerializer(hydrated).data)
+
+    def _hydrate(self, pk):
+        """Reload a ride through the view queryset so select_related and
+        the todays_ride_events Prefetch are populated, keeping write
+        responses identical in shape to GET responses."""
+        return (
+            Ride.objects
+            .select_related("id_rider", "id_driver")
+            .prefetch_related(
+                Prefetch(
+                    "ride_events",
+                    queryset=RideEvent.objects.filter(
+                        created_at__gte=timezone.now() - timedelta(hours=24)
+                    ),
+                    to_attr="todays_ride_events",
+                )
+            )
+            .get(pk=pk)
+        )
 
     @staticmethod
     def _annotate_haversine(qs, lat, lng):
