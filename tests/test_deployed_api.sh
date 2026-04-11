@@ -258,13 +258,13 @@ assert_jq "PAGE-06" "page_size>max capped, returns all 24" \
 
 printf "\n${CYAN}${BOLD}[4/7] Filtering${NC}\n"
 
-fetch_auth "${ENDPOINT}?status=pickup&page_size=100"
-assert_jq "FILT-01a" "status=pickup count is 8" '.count' "8"
-FILT01_ALL=$(echo "$BODY" | jq '[.results[].status] | all(. == "pickup")')
+fetch_auth "${ENDPOINT}?status=to-pickup&page_size=100"
+assert_jq "FILT-01a" "status=to-pickup count is 8" '.count' "8"
+FILT01_ALL=$(echo "$BODY" | jq '[.results[].status] | all(. == "to-pickup")')
 if [[ "$FILT01_ALL" == "true" ]]; then
-    pass_test "FILT-01b" "All results have status=pickup"
+    pass_test "FILT-01b" "All results have status=to-pickup"
 else
-    fail_test "FILT-01b" "All results have status=pickup" "Some results have wrong status"
+    fail_test "FILT-01b" "All results have status=to-pickup" "Some results have wrong status"
 fi
 
 fetch_auth "${ENDPOINT}?status=dropoff&page_size=100"
@@ -282,8 +282,8 @@ else
     fail_test "FILT-04b" "All results have rider_email=alice" "Some results have wrong rider"
 fi
 
-fetch_auth "${ENDPOINT}?status=pickup&rider_email=alice@example.com&page_size=100"
-assert_jq "FILT-05" "Combined pickup+alice count is 4" '.count' "4"
+fetch_auth "${ENDPOINT}?status=to-pickup&rider_email=alice@example.com&page_size=100"
+assert_jq "FILT-05" "Combined to-pickup+alice count is 4" '.count' "4"
 
 fetch_auth "${ENDPOINT}?status=invalid"
 assert_status "FILT-06a" "Invalid status returns 200 (not error)" "200"

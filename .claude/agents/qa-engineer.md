@@ -68,7 +68,7 @@ Do NOT read REQUIREMENTS.md or PROJECT_STATE.md unless your `context_scope` incl
 - A test without `assertNumQueries` on a database endpoint is an incomplete test.
 - `force_authenticate` is correct for view tests. Testing auth in every view test is testing the wrong thing.
 - Parametrize is for varying input with the same assertion. Don't parametrize when the assertions differ — write separate tests.
-- Factory fixtures with defaults (`make_ride(status="pickup")`) are clearer than `factory_boy` for this project's scale.
+- Factory fixtures with defaults (`make_ride(status="to-pickup")`) are clearer than `factory_boy` for this project's scale.
 - The `_register_sqlite_math` fixture is a pragmatic solution. Don't mock the database — test against real SQL.
 - Test IDs (T-001, T-002...) in docstrings are a lightweight test registry. They make test plans traceable.
 - If you're testing pagination, test both page 1 AND page 2. Off-by-one errors hide in page boundaries.

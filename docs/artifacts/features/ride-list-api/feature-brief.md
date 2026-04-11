@@ -28,8 +28,8 @@ sorting by pickup_time or distance from a given GPS coordinate.
 - [ ] Response includes `count`, `next`, `previous`, `results` keys
 - [ ] Each ride in results has nested `id_rider` and `id_driver` objects
 - [ ] Each ride has `todays_ride_events` array (may be empty)
-- [ ] `?status=pickup` returns only rides with status "pickup"
-- [ ] `?rider_email=alice@wingz.com` returns only rides where rider is Alice
+- [ ] `?status=to-pickup` returns only rides with status "to-pickup"
+- [ ] `?rider_email=alice@example.com` returns only rides where rider is Alice
 - [ ] `?sort_by=pickup_time` returns rides ordered by pickup_time ASC
 - [ ] `?sort_by=distance&latitude=X&longitude=Y` returns rides nearest-first
 - [ ] `?sort_by=distance` without coords returns 400 with error message

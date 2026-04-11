@@ -63,7 +63,7 @@ def admin_client(api_client, admin_user):
 def make_ride(rider, driver):
     """Factory — creates rides with sensible defaults. Override any param."""
     from rides.models import Ride
-    def _make(status="pickup", pickup_lat=14.6349, pickup_lng=-90.5069,
+    def _make(status="to-pickup", pickup_lat=14.6349, pickup_lng=-90.5069,
               dropoff_lat=14.6407, dropoff_lng=-90.5133,
               pickup_time=None, rider_override=None, driver_override=None):
         return Ride.objects.create(

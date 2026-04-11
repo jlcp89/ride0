@@ -441,7 +441,7 @@ models:
       - name: status
         type: VARCHAR(50)
         django: CharField(max_length=50)
-        description: "'en-route', 'pickup', 'dropoff'"
+        description: "'en-route', 'to-pickup', 'dropoff'"
       - name: id_rider
         type: INT FK → users.id_user
         django: "ForeignKey(User, on_delete=CASCADE, related_name='rides_as_rider', db_column='id_rider')"
@@ -513,7 +513,7 @@ All users seeded with password hashed via Django's `make_password('adminpass123'
 ## Rides (20+ total)
 
 Design requirements:
-- At least 5 per status (en-route, pickup, dropoff) — tests status filtering
+- At least 5 per status (en-route, to-pickup, dropoff) — tests status filtering
 - Multiple drivers and riders — tests email filtering
 - GPS coords at KNOWN distances from reference point (14.5995, -90.5131 = Zone 10, Guatemala City):
   - 2-3 rides AT reference point (~0 km) — distance sort first position
@@ -525,7 +525,7 @@ Design requirements:
 ## RideEvents (60+ total)
 
 Design requirements:
-- Every ride with status 'pickup' or 'dropoff' must have matching events
+- Every ride with status 'to-pickup' or 'dropoff' must have matching events
 - Pickup/dropoff EVENT PAIRS for bonus SQL:
   - 10+ pairs where duration > 60 minutes (counted in bonus)
   - 5+ pairs where duration < 60 minutes (excluded from bonus)
@@ -601,7 +601,7 @@ curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
 ## Query Parameters
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| status | string | No | — | Filter: en-route, pickup, dropoff |
+| status | string | No | — | Filter: en-route, to-pickup, dropoff |
 | rider_email | string | No | — | Filter: exact email match |
 | sort_by | string | No | — | pickup_time or distance |
 | latitude | float | Conditional | — | Required when sort_by=distance |
@@ -618,7 +618,7 @@ curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
   "results": [
     {
       "id_ride": 1,
-      "status": "pickup",
+      "status": "to-pickup",
       "id_rider": {
         "id_user": 5,
         "role": "rider",
@@ -668,7 +668,7 @@ curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
 curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
 
 # Filter + sort
-curl -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?status=pickup&sort_by=pickup_time"
+curl -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?status=to-pickup&sort_by=pickup_time"
 
 # Distance sort
 curl -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?sort_by=distance&latitude=14.5995&longitude=-90.5131"

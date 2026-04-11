@@ -43,7 +43,7 @@ class TestRideModel:
         from rides.models import Ride
         from django.utils import timezone
         ride = Ride.objects.create(
-            status="pickup", id_rider=rider, id_driver=driver,
+            status="to-pickup", id_rider=rider, id_driver=driver,
             pickup_latitude=14.0, pickup_longitude=-90.0,
             dropoff_latitude=14.1, dropoff_longitude=-90.1,
             pickup_time=timezone.now(),
@@ -55,12 +55,12 @@ class TestRideModel:
         from rides.models import Ride
         from django.utils import timezone
         ride = Ride.objects.create(
-            status="pickup", id_rider=rider, id_driver=driver,
+            status="to-pickup", id_rider=rider, id_driver=driver,
             pickup_latitude=14.0, pickup_longitude=-90.0,
             dropoff_latitude=14.1, dropoff_longitude=-90.1,
             pickup_time=timezone.now(),
         )
-        assert "pickup" in str(ride)
+        assert "to-pickup" in str(ride)
 
 
 @pytest.mark.django_db
@@ -77,7 +77,7 @@ class TestRideEventModel:
         from rides.models import Ride, RideEvent
         from django.utils import timezone
         ride = Ride.objects.create(
-            status="pickup", id_rider=rider, id_driver=driver,
+            status="to-pickup", id_rider=rider, id_driver=driver,
             pickup_latitude=14.0, pickup_longitude=-90.0,
             dropoff_latitude=14.1, dropoff_longitude=-90.1,
             pickup_time=timezone.now(),
@@ -92,7 +92,7 @@ class TestRideEventModel:
         from rides.models import Ride, RideEvent
         from django.utils import timezone
         ride = Ride.objects.create(
-            status="pickup", id_rider=rider, id_driver=driver,
+            status="to-pickup", id_rider=rider, id_driver=driver,
             pickup_latitude=14.0, pickup_longitude=-90.0,
             dropoff_latitude=14.1, dropoff_longitude=-90.1,
             pickup_time=timezone.now(),

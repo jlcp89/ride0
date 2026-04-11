@@ -45,14 +45,14 @@ class TestRideList:
 
     def test_filter_by_status(self, admin_client, make_ride):
         """T-005: Filter by status returns only matching rides."""
-        make_ride(status="pickup")
-        make_ride(status="pickup")
+        make_ride(status="to-pickup")
+        make_ride(status="to-pickup")
         make_ride(status="dropoff")
-        response = admin_client.get("/api/rides/?status=pickup")
+        response = admin_client.get("/api/rides/?status=to-pickup")
         assert response.status_code == 200
         assert response.data["count"] == 2
         for ride in response.data["results"]:
-            assert ride["status"] == "pickup"
+            assert ride["status"] == "to-pickup"
 
     def test_filter_by_rider_email(self, admin_client, make_ride, rider):
         """T-006: Filter by rider_email returns only matching rides."""
@@ -74,14 +74,14 @@ class TestRideList:
 
     def test_combined_filters(self, admin_client, make_ride):
         """T-007: status + rider_email both applied."""
-        make_ride(status="pickup")
+        make_ride(status="to-pickup")
         make_ride(status="dropoff")
         response = admin_client.get(
-            "/api/rides/?status=pickup&rider_email=rider1@wingz.com"
+            "/api/rides/?status=to-pickup&rider_email=rider1@wingz.com"
         )
         assert response.status_code == 200
         assert response.data["count"] == 1
-        assert response.data["results"][0]["status"] == "pickup"
+        assert response.data["results"][0]["status"] == "to-pickup"
 
     def test_sort_by_pickup_time(self, admin_client, make_ride):
         """T-008: Rides ordered by pickup_time ascending."""
@@ -127,14 +127,14 @@ class TestRideList:
 
     def test_filter_plus_distance_sort(self, admin_client, make_ride):
         """T-012: Filter + sort compose correctly."""
-        make_ride(status="pickup", pickup_lat=14.5586, pickup_lng=-90.7295)
-        make_ride(status="pickup", pickup_lat=14.5995, pickup_lng=-90.5131)
+        make_ride(status="to-pickup", pickup_lat=14.5586, pickup_lng=-90.7295)
+        make_ride(status="to-pickup", pickup_lat=14.5995, pickup_lng=-90.5131)
         make_ride(status="dropoff", pickup_lat=14.5880, pickup_lng=-90.4800)
         response = admin_client.get(
-            "/api/rides/?status=pickup&sort_by=distance"
+            "/api/rides/?status=to-pickup&sort_by=distance"
             "&latitude=14.5995&longitude=-90.5131"
         )
         assert response.status_code == 200
         assert response.data["count"] == 2
         for r in response.data["results"]:
-            assert r["status"] == "pickup"
+            assert r["status"] == "to-pickup"

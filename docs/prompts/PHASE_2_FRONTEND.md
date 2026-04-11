@@ -42,7 +42,7 @@ The frontend deploy will **add** nginx and **remove** the port 80 → 8000 short
 - Role: `admin`
 
 ### Seed data expectations
-- 24 rides total, 8 per status (`en-route`, `pickup`, `dropoff`), 8 per rider
+- 24 rides total, 8 per status (`en-route`, `to-pickup`, `dropoff`), 8 per rider
 - GPS zones in Guatemala City for distance-sort testing
 
 ### API endpoint summary
@@ -50,7 +50,7 @@ The frontend deploy will **add** nginx and **remove** the port 80 → 8000 short
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| status | string | `en-route`, `pickup`, `dropoff` |
+| status | string | `en-route`, `to-pickup`, `dropoff` |
 | rider_email | string | Exact match |
 | sort_by | string | `pickup_time` or `distance` |
 | latitude | float | Required when `sort_by=distance` |
@@ -264,7 +264,7 @@ export default function App() {
         <select value={status} onChange={e => setStatus(e.target.value)}>
           <option value="">All statuses</option>
           <option value="en-route">en-route</option>
-          <option value="pickup">pickup</option>
+          <option value="to-pickup">to-pickup</option>
           <option value="dropoff">dropoff</option>
         </select>
         <input
@@ -561,7 +561,7 @@ VITE_API_BASE_URL=http://107.23.122.99
 ## Features
 
 - Paginated ride list with nested rider, driver, and today's events
-- Filter by status (`en-route`, `pickup`, `dropoff`)
+- Filter by status (`en-route`, `to-pickup`, `dropoff`)
 - Filter by rider email (exact match)
 - Sort by pickup time
 - Prev/Next pagination with page count
@@ -696,7 +696,7 @@ npm run build
 npm run dev
 # Manually verify in browser:
 #   - Table loads 10 rows (page 1 of 3)
-#   - Status=pickup → 8 rows, 1 page
+#   - Status=to-pickup → 8 rows, 1 page
 #   - Rider email filter → 8 rows
 #   - Sort by pickup_time → rows reorder
 #   - Prev/Next walks through pages

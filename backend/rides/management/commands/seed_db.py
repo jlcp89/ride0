@@ -5,10 +5,30 @@ via on_delete=CASCADE) and rebuilds the dataset on every invocation. The
 deploy workflow runs it after every migration so the demo always shows
 now-relative timestamps in the UI.
 
-Status semantics:
-  pickup   = upcoming ride (pickup_time is in the future)
-  en-route = trip in progress (pickup just happened, minutes ago)
-  dropoff  = trip concluded (pickup_time in the past — fresh or historical)
+Status semantic model
+---------------------
+Every ride is in exactly one phase of a real trip lifecycle:
+
+  to-pickup = Ride booked, driver accepted, driver heading to pickup.
+              Rider is NOT yet in the car.
+              pickup_time: future (the scheduled/expected pickup moment).
+              Events: 2 (request + accept).
+
+  en-route  = Trip in progress. Rider IS in the car. Driver is driving
+              to the destination.
+              pickup_time: recent past (minutes to ~90 min ago).
+              Events: 3 (request + accept + pickup).
+
+  dropoff   = Trip completed. Rider has been dropped off.
+              pickup_time: past (fresh or historical).
+              Events: 5 (request + accept + pickup + dropoff + rating).
+
+Lifecycle: to-pickup -> en-route -> dropoff.
+
+The event descriptions `"Status changed to pickup"` and `"Status changed
+to dropoff"` are spec-fixed (see requirement.md line 104 and bonus SQL
+filters in sql/bonus_report.sql) and must not be renamed even though the
+status value is now `to-pickup` rather than `pickup`.
 
 DO NOT run against a database that holds real user data. There is no real
 user data in this project; if that ever changes, remove this command from
@@ -19,9 +39,19 @@ from datetime import timedelta
 
 from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand
+from django.db import connection
 from django.utils import timezone
 
 from rides.models import Ride, RideEvent, User
+
+# Canonical event descriptions. The first two are free-form; the next two
+# are fixed by requirement.md line 104 and must match exactly (bonus SQL
+# filters on these literals). The last is free-form.
+EVENT_REQUESTED = "Ride requested"
+EVENT_ACCEPTED = "Ride accepted by driver"
+EVENT_PICKUP = "Status changed to pickup"   # spec-fixed
+EVENT_DROPOFF = "Status changed to dropoff"  # spec-fixed
+EVENT_RATED = "Ride rated by rider"
 
 
 class Command(BaseCommand):
@@ -30,6 +60,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # Synthetic-only data — see module docstring.
         User.objects.all().delete()
+        _reset_auto_increment()
 
         now = timezone.now()
         admin_pwd = make_password("adminpass123")
@@ -74,56 +105,59 @@ class Command(BaseCommand):
         drivers = [chris, howard, randy]
 
         # ---------- Rides ----------
-        # 24 rides ordered so page 1 shows a mix of statuses and event counts:
-        # stress test + fresh dropoffs + en-route rides + some pickup rides.
+        # 24 rides ordered so page 1 shows a mix of statuses and event
+        # counts: fresh dropoffs (5 events) + en-route (3 events) +
+        # to-pickup (2 events).
         #
-        # Rider distribution is constrained by the deployed regression script
+        # Rider distribution is constrained by the deployed regression
         # (test_deployed_api.sh):
-        #   - Alice: 8 rides total, of which 4 are `pickup` (FILT-04a, FILT-05)
+        #   - Alice: 8 rides total, of which 4 are to-pickup (FILT-04a/05)
         #   - Bob:   8 rides total
         #   - Carol: 8 rides total
-        # Status distribution: 8 pickup, 8 en-route, 8 dropoff.
+        # Status distribution: 8 to-pickup, 8 en-route, 8 dropoff.
         #
-        # Tuple format:
-        # (status, pickup_time_offset_from_now, rider_idx, driver_idx, zone_idx)
+        # Tuple: (status, pickup_offset, rider_idx, driver_idx, zone_idx,
+        #         trip_duration_min)
+        # trip_duration_min is only meaningful for dropoff rides; others
+        # pass 0.
         ride_specs = [
-            # Ride 1 (idx 0): stress test, dropoff finished 90 min ago
-            ("dropoff",  -timedelta(minutes=90), 0, 0, 0),  # alice, chris, zone10
-            # Rides 2, 3 (idx 1, 2): fresh dropoffs (recent past)
-            ("dropoff",  -timedelta(hours=2),    1, 1, 1),  # bob, howard, zone14
-            ("dropoff",  -timedelta(hours=4),    2, 2, 2),  # carol, randy, antigua
-            # Rides 4, 5, 6 (idx 3, 4, 5): en-route, very recent
-            ("en-route", -timedelta(minutes=5),  0, 1, 0),  # alice, howard, zone10
-            ("en-route", -timedelta(minutes=12), 1, 2, 1),  # bob, randy, zone14
-            ("en-route", -timedelta(minutes=18), 2, 0, 2),  # carol, chris, antigua
-            # Rides 7, 8, 9 (idx 6, 7, 8): pickup, near future
-            ("pickup",   timedelta(hours=1),     0, 0, 0),  # alice pickup #1
-            ("pickup",   timedelta(hours=4),     1, 1, 1),  # bob pickup
-            ("pickup",   timedelta(hours=8),     2, 2, 2),  # carol pickup
-            # Ride 10 (idx 9): en-route
-            ("en-route", -timedelta(minutes=25), 0, 2, 1),  # alice en-route #2
-            # Rides 11-14 (idx 10-13): more en-route
-            ("en-route", -timedelta(minutes=33), 1, 0, 2),  # bob
-            ("en-route", -timedelta(minutes=42), 2, 1, 0),  # carol
-            ("en-route", -timedelta(minutes=51), 1, 2, 2),  # bob
-            ("en-route", -timedelta(minutes=58), 2, 0, 1),  # carol
-            # Rides 15-19 (idx 14-18): more pickup, further out
-            ("pickup",   timedelta(hours=18),            0, 1, 0),  # alice pickup #2
-            ("pickup",   timedelta(days=1),              1, 2, 1),  # bob pickup
-            ("pickup",   timedelta(days=1, hours=12),    0, 0, 2),  # alice pickup #3
-            ("pickup",   timedelta(days=2),              2, 1, 0),  # carol pickup
-            ("pickup",   timedelta(days=3),              0, 2, 1),  # alice pickup #4
-            # Rides 20, 21 (idx 19, 20): dropoffs ~2 weeks ago — boundary tests
-            ("dropoff",  -timedelta(days=14),    1, 0, 0),  # bob, chris — 61 min
-            ("dropoff",  -timedelta(days=15),    1, 1, 1),  # bob, howard — 59 min (excluded)
-            # Rides 22-24 (idx 21-23): historical dropoffs across months
-            ("dropoff",  -timedelta(days=32),    2, 1, 2),  # carol, howard — 75 min
-            ("dropoff",  -timedelta(days=62),    0, 2, 1),  # alice, randy — 90 min
-            ("dropoff",  -timedelta(days=95),    2, 0, 0),  # carol, chris — 120 min
+            # Rides 1-3: fresh dropoffs (all 5 events visible in EVENTS 24H)
+            ("dropoff",  -timedelta(minutes=90), 0, 0, 0, 25),  # alice, chris, zone10
+            ("dropoff",  -timedelta(hours=2),    1, 1, 1, 28),  # bob, howard, zone14
+            ("dropoff",  -timedelta(hours=4),    2, 2, 2, 32),  # carol, randy, antigua
+            # Rides 4-6: en-route, very recent
+            ("en-route", -timedelta(minutes=8),  0, 1, 0, 0),   # alice, howard, zone10
+            ("en-route", -timedelta(minutes=15), 1, 2, 1, 0),   # bob, randy, zone14
+            ("en-route", -timedelta(minutes=25), 2, 0, 2, 0),   # carol, chris, antigua
+            # Rides 7-9: to-pickup, near future
+            ("to-pickup", timedelta(minutes=30), 0, 0, 0, 0),   # alice to-pickup #1
+            ("to-pickup", timedelta(hours=1),    1, 1, 1, 0),   # bob to-pickup
+            ("to-pickup", timedelta(hours=2),    2, 2, 2, 0),   # carol to-pickup
+            # Ride 10: en-route
+            ("en-route", -timedelta(minutes=35), 0, 2, 1, 0),   # alice en-route #2
+            # Rides 11-14: more en-route
+            ("en-route", -timedelta(minutes=45), 1, 0, 2, 0),   # bob
+            ("en-route", -timedelta(minutes=55), 2, 1, 0, 0),   # carol
+            ("en-route", -timedelta(minutes=70), 1, 2, 2, 0),   # bob
+            ("en-route", -timedelta(minutes=85), 2, 0, 1, 0),   # carol
+            # Rides 15-19: more to-pickup, further out
+            ("to-pickup", timedelta(hours=4),            0, 1, 0, 0),  # alice #2
+            ("to-pickup", timedelta(hours=8),            1, 2, 1, 0),  # bob
+            ("to-pickup", timedelta(days=1),             0, 0, 2, 0),  # alice #3
+            ("to-pickup", timedelta(days=1, hours=12),   2, 1, 0, 0),  # carol
+            ("to-pickup", timedelta(days=2),             0, 2, 1, 0),  # alice #4
+            # Rides 20-21: dropoffs ~2 weeks ago — boundary tests
+            ("dropoff",  -timedelta(days=14),    1, 0, 0, 61),  # bob, chris — 61 min included
+            ("dropoff",  -timedelta(days=15),    1, 1, 1, 59),  # bob, howard — 59 min excluded
+            # Rides 22-24: historical dropoffs across months
+            ("dropoff",  -timedelta(days=32),    2, 1, 2, 75),  # carol, howard — 75 min
+            ("dropoff",  -timedelta(days=62),    0, 2, 1, 90),  # alice, randy — 90 min
+            ("dropoff",  -timedelta(days=95),    2, 0, 0, 120),  # carol, chris — 120 min
         ]
 
         rides = []
-        for status, offset, rider_idx, driver_idx, zone_idx in ride_specs:
+        ride_durations = []
+        for status, offset, rider_idx, driver_idx, zone_idx, duration in ride_specs:
             zone = zones[zone_idx]
             r = Ride.objects.create(
                 status=status,
@@ -136,94 +170,24 @@ class Command(BaseCommand):
                 pickup_time=now + offset,
             )
             rides.append(r)
+            ride_durations.append(duration)
 
         # ---------- Events ----------
+        # Every ride has a canonical 5-step lifecycle; only the events that
+        # have already happened by `now` are created. The current status
+        # tells us how far along the ride is.
+        for r, duration in zip(rides, ride_durations):
+            _create_events_for_ride(r, duration, now)
 
-        # Ride 1 (idx 0): realistic full trip lifecycle.
-        # 6 fresh events (all within 24h) walking through the normal ride
-        # flow, plus 1 event 48h ago to demonstrate the 24h Prefetch filter
-        # excluding old events. EVENTS 24H column shows 6.
-        #
-        # Note: we intentionally do NOT stress-test the Prefetch filter with
-        # many events here — `tests/test_performance.py` already covers the
-        # query count + filter correctness at the code level with its own
-        # fixtures, and a realistic event count reads better in the UI demo.
-        ride1 = rides[0]
-        ride1_pickup = ride1.pickup_time  # now - 90 min
-        ride1_events = [
-            ("Ride requested",              ride1_pickup - timedelta(minutes=10)),
-            ("Driver assigned",             ride1_pickup - timedelta(minutes=5)),
-            ("Status changed to pickup",    ride1_pickup),
-            ("Status changed to dropoff",   ride1_pickup + timedelta(minutes=25)),
-            ("Payment processed",           ride1_pickup + timedelta(minutes=27)),
-            ("Rating submitted",            ride1_pickup + timedelta(minutes=35)),
-        ]
-        for desc, ts in ride1_events:
-            RideEvent.objects.create(
-                id_ride=ride1, description=desc, created_at=ts,
-            )
-        # 1 old event (48h ago) — excluded by the 24h Prefetch filter.
+        # MIN/MAX bonus-SQL edge case: ride 22 (idx 21) — carol's ~1-month-old
+        # dropoff — gets an EXTRA "Status changed to pickup" event 2 minutes
+        # before the normal one. This exercises MIN(created_at) in
+        # bonus_report.sql which handles rides with multiple pickup events.
+        r22 = rides[21]
         RideEvent.objects.create(
-            id_ride=ride1, description="Old analytics event",
-            created_at=now - timedelta(hours=48),
-        )
-
-        # Rides 2, 3 (idx 1, 2): fresh dropoff pairs — 2 events each
-        for idx in (1, 2):
-            r = rides[idx]
-            RideEvent.objects.create(
-                id_ride=r, description="Status changed to pickup",
-                created_at=r.pickup_time,
-            )
-            RideEvent.objects.create(
-                id_ride=r, description="Status changed to dropoff",
-                created_at=r.pickup_time + timedelta(minutes=30),
-            )
-
-        # Ride 2 (idx 1) gets one extra event from 48h ago — independent
-        # 24h-filter exclusion test. EVENTS 24H column on ride 2 still shows 2.
-        RideEvent.objects.create(
-            id_ride=rides[1], description="Old status update",
-            created_at=now - timedelta(hours=48),
-        )
-
-        # En-route rides — 1 pickup event each, at the ride's pickup_time
-        en_route_indices = (3, 4, 5, 9, 10, 11, 12, 13)
-        for idx in en_route_indices:
-            r = rides[idx]
-            RideEvent.objects.create(
-                id_ride=r, description="Status changed to pickup",
-                created_at=r.pickup_time,
-            )
-
-        # Historical dropoff rides 20-24 (idx 19-23): pickup/dropoff event
-        # pairs sized for the bonus SQL "trips > 1 hour" report.
-        # (ride_idx, duration_minutes)
-        historical_pairs = [
-            (19, 61),   # ~2 weeks ago — boundary INCLUDED
-            (20, 59),   # ~2 weeks ago — boundary EXCLUDED
-            (21, 75),   # ~1 month ago
-            (22, 90),   # ~2 months ago
-            (23, 120),  # ~3 months ago
-        ]
-        for idx, duration_min in historical_pairs:
-            r = rides[idx]
-            RideEvent.objects.create(
-                id_ride=r, description="Status changed to pickup",
-                created_at=r.pickup_time,
-            )
-            RideEvent.objects.create(
-                id_ride=r, description="Status changed to dropoff",
-                created_at=r.pickup_time + timedelta(minutes=duration_min),
-            )
-
-        # MIN/MAX bonus SQL edge: ride 22 (idx 21) gets a second
-        # "Status changed to pickup" event 10 min earlier than the first.
-        # The bonus report uses MIN(created_at) to capture the first pickup.
-        RideEvent.objects.create(
-            id_ride=rides[21],
-            description="Status changed to pickup",
-            created_at=rides[21].pickup_time - timedelta(minutes=10),
+            id_ride=r22,
+            description=EVENT_PICKUP,
+            created_at=r22.pickup_time - timedelta(minutes=2),
         )
 
         self.stdout.write(self.style.SUCCESS(
@@ -231,3 +195,55 @@ class Command(BaseCommand):
             f"{Ride.objects.count()} rides, "
             f"{RideEvent.objects.count()} events."
         ))
+
+
+def _reset_auto_increment():
+    """Reset the AUTO_INCREMENT counter on users, rides, ride_events so that
+    a freshly-seeded DB always starts IDs at 1. Without this, every re-seed
+    accumulates ever-higher IDs (SQLite doesn't reset on DELETE, and MySQL
+    doesn't reset on TRUNCATE CASCADE either).
+    """
+    with connection.cursor() as cursor:
+        if connection.vendor == "sqlite":
+            cursor.execute(
+                "DELETE FROM sqlite_sequence "
+                "WHERE name IN ('users', 'rides', 'ride_events')"
+            )
+        elif connection.vendor == "mysql":
+            for table in ("users", "rides", "ride_events"):
+                cursor.execute(f"ALTER TABLE {table} AUTO_INCREMENT = 1")
+
+
+def _create_events_for_ride(ride, trip_duration_min, now):
+    """Create the canonical event log for a ride based on its current status.
+
+    Every ride's full lifecycle is 5 events (request, accept, pickup,
+    dropoff, rated). We only create the events that have happened by `now`:
+      to-pickup -> 2 events (request, accept)
+      en-route  -> 3 events (request, accept, pickup)
+      dropoff   -> 5 events (request, accept, pickup, dropoff, rated)
+
+    For to-pickup rides pickup_time is in the future, so request/accept
+    anchor to `now` (they already happened). For en-route and dropoff
+    rides, request/accept anchor to pickup_time - offsets.
+    """
+    pt = ride.pickup_time
+
+    if ride.status == "to-pickup":
+        req_at = now - timedelta(minutes=10)
+        acc_at = now - timedelta(minutes=5)
+    else:
+        req_at = pt - timedelta(minutes=10)
+        acc_at = pt - timedelta(minutes=5)
+
+    RideEvent.objects.create(id_ride=ride, description=EVENT_REQUESTED, created_at=req_at)
+    RideEvent.objects.create(id_ride=ride, description=EVENT_ACCEPTED, created_at=acc_at)
+
+    if ride.status in ("en-route", "dropoff"):
+        RideEvent.objects.create(id_ride=ride, description=EVENT_PICKUP, created_at=pt)
+
+    if ride.status == "dropoff":
+        drop_at = pt + timedelta(minutes=trip_duration_min)
+        rate_at = drop_at + timedelta(minutes=3)
+        RideEvent.objects.create(id_ride=ride, description=EVENT_DROPOFF, created_at=drop_at)
+        RideEvent.objects.create(id_ride=ride, description=EVENT_RATED, created_at=rate_at)

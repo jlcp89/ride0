@@ -14,7 +14,7 @@ curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
 ## Query Parameters
 | Param | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| status | string | No | — | Filter: en-route, pickup, dropoff |
+| status | string | No | — | Filter: en-route, to-pickup, dropoff |
 | rider_email | string | No | — | Filter: exact email match |
 | sort_by | string | No | — | pickup_time or distance |
 | latitude | float | Conditional | — | Required when sort_by=distance |
@@ -31,7 +31,7 @@ curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
   "results": [
     {
       "id_ride": 1,
-      "status": "pickup",
+      "status": "to-pickup",
       "id_rider": {
         "id_user": 5,
         "role": "rider",
@@ -81,7 +81,7 @@ curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
 curl -u admin@wingz.com:adminpass123 http://localhost:8000/api/rides/
 
 # Filter + sort
-curl -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?status=pickup&sort_by=pickup_time"
+curl -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?status=to-pickup&sort_by=pickup_time"
 
 # Distance sort
 curl -u admin@wingz.com:adminpass123 "http://localhost:8000/api/rides/?sort_by=distance&latitude=14.5995&longitude=-90.5131"

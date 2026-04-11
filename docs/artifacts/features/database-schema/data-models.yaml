@@ -38,7 +38,7 @@ models:
       - name: status
         type: VARCHAR(50)
         django: CharField(max_length=50)
-        description: "'en-route', 'pickup', 'dropoff'"
+        description: "'en-route', 'to-pickup', 'dropoff'"
       - name: id_rider
         type: INT FK → users.id_user
         django: "ForeignKey(User, on_delete=CASCADE, related_name='rides_as_rider', db_column='id_rider')"

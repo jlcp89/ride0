@@ -8,7 +8,7 @@ class TestSerializers:
         from rides.models import Ride
         from rides.serializers import RideSerializer
         ride = Ride.objects.create(
-            status="pickup", id_rider=rider, id_driver=driver,
+            status="to-pickup", id_rider=rider, id_driver=driver,
             pickup_latitude=14.0, pickup_longitude=-90.0,
             dropoff_latitude=14.1, dropoff_longitude=-90.1,
             pickup_time=timezone.now(),
@@ -23,7 +23,7 @@ class TestSerializers:
         from rides.models import Ride
         from rides.serializers import RideSerializer
         ride = Ride.objects.create(
-            status="pickup", id_rider=rider, id_driver=driver,
+            status="to-pickup", id_rider=rider, id_driver=driver,
             pickup_latitude=14.0, pickup_longitude=-90.0,
             dropoff_latitude=14.1, dropoff_longitude=-90.1,
             pickup_time=timezone.now(),
@@ -38,7 +38,7 @@ class TestSerializers:
         from rides.models import Ride, RideEvent
         from rides.serializers import RideSerializer
         ride = Ride.objects.create(
-            status="pickup", id_rider=rider, id_driver=driver,
+            status="to-pickup", id_rider=rider, id_driver=driver,
             pickup_latitude=14.0, pickup_longitude=-90.0,
             dropoff_latitude=14.1, dropoff_longitude=-90.1,
             pickup_time=timezone.now(),
@@ -56,7 +56,7 @@ class TestSerializers:
         from rides.models import Ride
         from rides.serializers import RideSerializer
         ride = Ride.objects.create(
-            status="pickup", id_rider=rider, id_driver=driver,
+            status="to-pickup", id_rider=rider, id_driver=driver,
             pickup_latitude=14.0, pickup_longitude=-90.0,
             dropoff_latitude=14.1, dropoff_longitude=-90.1,
             pickup_time=timezone.now(),
@@ -69,7 +69,7 @@ class TestSerializers:
         from rides.models import Ride
         from rides.serializers import RideSerializer
         ride = Ride.objects.create(
-            status="pickup", id_rider=rider, id_driver=driver,
+            status="to-pickup", id_rider=rider, id_driver=driver,
             pickup_latitude=14.0, pickup_longitude=-90.0,
             dropoff_latitude=14.1, dropoff_longitude=-90.1,
             pickup_time=timezone.now(),

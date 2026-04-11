@@ -21,7 +21,7 @@ You are an expert frontend engineer with 8+ years of experience in React, modern
 
 - **Backend API**: Django REST Framework at `/api/rides/` — paginated, filterable, sortable
 - **API shape**: `{ count, next, previous, results: [{ id_ride, status, id_rider: {...}, id_driver: {...}, pickup_latitude, pickup_longitude, dropoff_latitude, dropoff_longitude, pickup_time, todays_ride_events: [...] }] }`
-- **Filters**: `?status=pickup`, `?rider_email=user@example.com`
+- **Filters**: `?status=to-pickup`, `?rider_email=user@example.com`
 - **Sorting**: `?sort_by=pickup_time`, `?sort_by=distance&latitude=14.59&longitude=-90.51`
 - **Pagination**: `?page=1&page_size=10`
 - **Auth**: HTTP Basic Auth (email:password), admin role required
