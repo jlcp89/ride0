@@ -139,39 +139,34 @@ class Command(BaseCommand):
 
         # ---------- Events ----------
 
-        # Ride 1 (idx 0): stress test for the Prefetch filter.
-        # 18 events within the last 24h (visible in todays_ride_events) +
-        # 3 events 48h ago (must be filtered OUT). EVENTS 24H column shows 18.
-        stress = rides[0]
-        fresh_event_log = [
-            ("Status changed to pickup",   timedelta(hours=23, minutes=0)),
-            ("Driver arrived at pickup",   timedelta(hours=22, minutes=30)),
-            ("Rider confirmed pickup",     timedelta(hours=21, minutes=0)),
-            ("En route to destination",    timedelta(hours=19, minutes=0)),
-            ("Midway checkpoint",          timedelta(hours=17, minutes=0)),
-            ("Traffic delay noted",        timedelta(hours=15, minutes=0)),
-            ("Approaching destination",    timedelta(hours=13, minutes=0)),
-            ("Arrived at destination",     timedelta(hours=11, minutes=0)),
-            ("Status changed to dropoff",  timedelta(hours=9,  minutes=0)),
-            ("Rider confirmed dropoff",    timedelta(hours=7,  minutes=0)),
-            ("Payment processed",          timedelta(hours=5,  minutes=0)),
-            ("Rating submitted",           timedelta(hours=4,  minutes=0)),
-            ("Receipt sent",               timedelta(hours=3,  minutes=30)),
-            ("Trip summary generated",     timedelta(hours=3,  minutes=0)),
-            ("Driver feedback received",   timedelta(hours=2,  minutes=30)),
-            ("Route logged",               timedelta(hours=2,  minutes=0)),
-            ("Trip archived",              timedelta(hours=1,  minutes=30)),
-            ("Final status update",        timedelta(hours=1,  minutes=0)),
+        # Ride 1 (idx 0): realistic full trip lifecycle.
+        # 6 fresh events (all within 24h) walking through the normal ride
+        # flow, plus 1 event 48h ago to demonstrate the 24h Prefetch filter
+        # excluding old events. EVENTS 24H column shows 6.
+        #
+        # Note: we intentionally do NOT stress-test the Prefetch filter with
+        # many events here — `tests/test_performance.py` already covers the
+        # query count + filter correctness at the code level with its own
+        # fixtures, and a realistic event count reads better in the UI demo.
+        ride1 = rides[0]
+        ride1_pickup = ride1.pickup_time  # now - 90 min
+        ride1_events = [
+            ("Ride requested",              ride1_pickup - timedelta(minutes=10)),
+            ("Driver assigned",             ride1_pickup - timedelta(minutes=5)),
+            ("Status changed to pickup",    ride1_pickup),
+            ("Status changed to dropoff",   ride1_pickup + timedelta(minutes=25)),
+            ("Payment processed",           ride1_pickup + timedelta(minutes=27)),
+            ("Rating submitted",            ride1_pickup + timedelta(minutes=35)),
         ]
-        for desc, ago in fresh_event_log:
+        for desc, ts in ride1_events:
             RideEvent.objects.create(
-                id_ride=stress, description=desc, created_at=now - ago,
+                id_ride=ride1, description=desc, created_at=ts,
             )
-        for desc in ("Old analytics event", "Old cleanup event", "Old archive event"):
-            RideEvent.objects.create(
-                id_ride=stress, description=desc,
-                created_at=now - timedelta(hours=48),
-            )
+        # 1 old event (48h ago) — excluded by the 24h Prefetch filter.
+        RideEvent.objects.create(
+            id_ride=ride1, description="Old analytics event",
+            created_at=now - timedelta(hours=48),
+        )
 
         # Rides 2, 3 (idx 1, 2): fresh dropoff pairs — 2 events each
         for idx in (1, 2):
