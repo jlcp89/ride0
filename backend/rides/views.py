@@ -6,9 +6,9 @@ from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.response import Response
 
-from rides.models import Ride, RideEvent
+from rides.models import Ride, RideEvent, User
 from rides.pagination import StandardPagination
-from rides.serializers import RideReadSerializer, RideWriteSerializer
+from rides.serializers import RideReadSerializer, RideWriteSerializer, UserSerializer
 
 
 class RideViewSet(viewsets.ModelViewSet):
@@ -122,3 +122,17 @@ class RideViewSet(viewsets.ModelViewSet):
         return qs.annotate(
             distance=RawSQL(haversine, (lat, lat, lng), output_field=FloatField())
         )
+
+
+class UserViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only list of users for the admin UI's rider/driver pickers.
+
+    Returns all users regardless of role — the frontend shows `role` next to
+    each name and `RideWriteSerializer`'s cross-field validator enforces that
+    rider != driver. Inherits `JWTAuthentication` + `IsAdminRole` from the
+    global DRF defaults, so non-admins get 403 automatically.
+    """
+
+    queryset = User.objects.all().order_by("id_user")
+    serializer_class = UserSerializer
+    pagination_class = StandardPagination

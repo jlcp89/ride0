@@ -158,7 +158,7 @@ fi
 # 1. Authentication & Authorization
 # ---------------------------------------------------------------------------
 
-printf "${CYAN}${BOLD}[1/8] Authentication & Authorization${NC}\n"
+printf "${CYAN}${BOLD}[1/9] Authentication & Authorization${NC}\n"
 
 fetch "$ENDPOINT" -H "Authorization: Bearer $ADMIN_TOKEN"
 assert_status "AUTH-01" "Admin Bearer token returns 200" "200"
@@ -187,7 +187,7 @@ assert_status "AUTH-07" "Basic Auth header is rejected (Bearer-only)" "401"
 # 2. Response Structure
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[2/8] Response Structure${NC}\n"
+printf "\n${CYAN}${BOLD}[2/9] Response Structure${NC}\n"
 
 fetch_auth "$ENDPOINT"
 
@@ -216,7 +216,7 @@ assert_jq "STRUCT-07" "Password NOT in id_driver" \
 # 3. Pagination
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[3/8] Pagination${NC}\n"
+printf "\n${CYAN}${BOLD}[3/9] Pagination${NC}\n"
 
 fetch_auth "$ENDPOINT"
 assert_jq "PAGE-01" "Default page returns 10 items" \
@@ -256,7 +256,7 @@ assert_jq "PAGE-06" "page_size>max capped, returns all 24" \
 # 4. Filtering
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[4/8] Filtering${NC}\n"
+printf "\n${CYAN}${BOLD}[4/9] Filtering${NC}\n"
 
 fetch_auth "${ENDPOINT}?status=to-pickup&page_size=100"
 assert_jq "FILT-01a" "status=to-pickup count is 8" '.count' "8"
@@ -297,7 +297,7 @@ assert_jq "FILT-07b" "Nonexistent email returns count=0" '.count' "0"
 # 5. Sorting
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[5/8] Sorting${NC}\n"
+printf "\n${CYAN}${BOLD}[5/9] Sorting${NC}\n"
 
 fetch_auth "${ENDPOINT}?sort_by=pickup_time&page_size=100"
 SORTED=$(echo "$BODY" | jq '[.results[].pickup_time] | . == sort')
@@ -351,7 +351,7 @@ assert_status "SORT-07" "Lat only (no lng) returns 400" "400"
 # 6. Today's Ride Events
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[6/8] Today's Ride Events${NC}\n"
+printf "\n${CYAN}${BOLD}[6/9] Today's Ride Events${NC}\n"
 
 fetch_auth "${ENDPOINT}?page_size=100"
 
@@ -404,7 +404,7 @@ fi
 # 7. Edge Cases
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[7/8] Edge Cases${NC}\n"
+printf "\n${CYAN}${BOLD}[7/9] Edge Cases${NC}\n"
 
 fetch "$ENDPOINT" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json"
 assert_status "EDGE-01" "POST with empty body returns 400 Bad Request" "400"
@@ -422,7 +422,7 @@ assert_status "EDGE-04" "Page beyond data returns 404" "404"
 # 8. CRUD Write Operations (full round-trip)
 # ---------------------------------------------------------------------------
 
-printf "\n${CYAN}${BOLD}[8/8] CRUD Write Operations${NC}\n"
+printf "\n${CYAN}${BOLD}[8/9] CRUD Write Operations${NC}\n"
 
 # Discover seed user IDs (avoid hardcoding AUTO_INCREMENT values) so the
 # round-trip works against any seeded instance.
@@ -464,6 +464,31 @@ assert_status "CRUD-03" "DELETE returns 204 No Content" "204"
 
 fetch_auth "$DETAIL_URL"
 assert_status "CRUD-04" "GET deleted ride returns 404" "404"
+
+# ---------------------------------------------------------------------------
+# 9. Users List (admin-only directory used by the ride1 CRUD UI pickers)
+# ---------------------------------------------------------------------------
+
+printf "\n${CYAN}${BOLD}[9/9] Users List${NC}\n"
+
+USERS_URL="${BASE_URL}/api/users/"
+
+fetch "$USERS_URL"
+assert_status "USERS-01" "Unauthenticated GET /api/users/ returns 401" "401"
+
+fetch "$USERS_URL" -H "Authorization: Bearer $ADMIN_TOKEN"
+assert_status "USERS-02" "Admin GET /api/users/ returns 200" "200"
+
+# Schema check: first user has exactly the 6 public fields and no password exposed.
+USERS_SCHEMA_OK=$(echo "$BODY" | jq '
+    .results[0] | (keys | sort) ==
+    ["email","first_name","id_user","last_name","phone_number","role"]
+')
+if [[ "$USERS_SCHEMA_OK" == "true" ]]; then
+    pass_test "USERS-03" "User schema has 6 fields, no password"
+else
+    fail_test "USERS-03" "User schema has 6 fields, no password" "Body: $BODY"
+fi
 
 # ---------------------------------------------------------------------------
 # Summary

@@ -3,10 +3,11 @@ from rest_framework.routers import DefaultRouter
 
 from rides.auth_views import LoginView, LogoutView, MeView, RefreshView
 from rides.report_views import TripsOverHourReportView
-from rides.views import RideViewSet
+from rides.views import RideViewSet, UserViewSet
 
 router = DefaultRouter()
 router.register(r"rides", RideViewSet, basename="ride")
+router.register(r"users", UserViewSet, basename="user")
 
 urlpatterns = [
     path("auth/login/", LoginView.as_view(), name="auth-login"),
