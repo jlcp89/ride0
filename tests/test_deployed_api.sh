@@ -11,7 +11,7 @@
 # =============================================================================
 set -euo pipefail
 
-BASE_URL="${1:-http://107.23.122.99}"
+BASE_URL="${1:-https://wingz-ride.d3sarrollo.dev}"
 ENDPOINT="${BASE_URL}/api/rides/"
 LOGIN_URL="${BASE_URL}/api/auth/login/"
 

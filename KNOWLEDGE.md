@@ -41,6 +41,18 @@ Debugging insights, environment quirks, and dependency gotchas that survive acro
 - **Solution**: Always pass an explicit `-H "Host: <public-ip>"` header in in-box smoke tests so the request looks like real user traffic. In the GitHub Actions workflow, use `${{ secrets.EC2_HOST_PROD }}` as the header value so the host is sourced from the same secret as the SSH target.
 - **Prevention**: When writing smoke tests that run from inside a box behind nginx, remember that nginx forwards the incoming `Host` header unchanged via `proxy_set_header Host $host;`. If the backend validates hosts, your test Host header must be in the allowed list.
 
+### SQLite and MySQL don't reset AUTO_INCREMENT on DELETE
+- **Context**: The `seed_db` management command wipes and rebuilds the dataset on every run (`User.objects.all().delete()` cascades to rides + events). Running it twice in a row.
+- **Problem**: After the second run, ride IDs were 121-144 instead of 1-24. SQLite's `sqlite_sequence` table persists across DELETEs; MySQL's `AUTO_INCREMENT` counter also doesn't reset on DELETE (only on TRUNCATE, and TRUNCATE CASCADE doesn't work the way you'd think either). The UI then shows `#121, #122, ...` which looks bad on a demo.
+- **Solution**: After the delete, issue vendor-specific raw SQL to reset the counter. SQLite: `DELETE FROM sqlite_sequence WHERE name IN ('users', 'rides', 'ride_events')`. MySQL: `ALTER TABLE <t> AUTO_INCREMENT = 1` for each table. Detect the vendor via `django.db.connection.vendor`. Django has no built-in helper.
+- **Prevention**: Any Django management command that wipes and rebuilds auto-increment PKs needs an explicit sequence reset. The wipe itself is not enough.
+
+### Ride status has no enforced enum — it's a free-form CharField
+- **Context**: Considering a rename of the status value `pickup` → `to-pickup` and wondering whether a migration was needed
+- **Problem**: Had to trace where status was validated to know if renaming required schema changes
+- **Solution**: `rides/models.py` defines `status = models.CharField(max_length=50)` with **no `choices=` constraint, no DB CHECK, no DRF serializer validation**. The three canonical values (`en-route`, `to-pickup`, `dropoff`) are enforced only by convention — by seed_db, by the frontend dropdown, and by the regression script. Renaming is a pure text replacement across those locations; no migration required.
+- **Prevention**: When a Django model field has no `choices=`, the "valid values" are a documentation/convention problem, not a schema problem. Grep for literal strings across tests + frontend + regression + seed before declaring the rename complete.
+
 ## Dev Tooling
 
 ### Vite 8 ESLint flat config only gives `globals.browser`

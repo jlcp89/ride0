@@ -82,7 +82,7 @@ jobs:
             WorkingDirectory=/home/ec2-user/production/wingz
             Environment="USE_SQLITE=1"
             Environment="DJANGO_DEBUG=False"
-            Environment="DJANGO_ALLOWED_HOSTS=${{ secrets.EC2_HOST_DEV }}"
+            Environment="DJANGO_ALLOWED_HOSTS=wingz-ride.d3sarrollo.dev,107.23.122.99,localhost,127.0.0.1"
             Environment="DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}"
             ExecStart=/home/ec2-user/production/wingz/.venv/bin/gunicorn --bind 0.0.0.0:8000 --workers 2 wingz.wsgi:application
             Restart=always
@@ -151,7 +151,7 @@ jobs:
             WorkingDirectory=/home/ec2-user/production/wingz
             Environment="USE_SQLITE=1"
             Environment="DJANGO_DEBUG=False"
-            Environment="DJANGO_ALLOWED_HOSTS=${{ secrets.EC2_HOST_PROD }}"
+            Environment="DJANGO_ALLOWED_HOSTS=wingz-ride.d3sarrollo.dev,107.23.122.99,localhost,127.0.0.1"
             Environment="DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}"
             ExecStart=/home/ec2-user/production/wingz/.venv/bin/gunicorn --bind 0.0.0.0:8000 --workers 2 wingz.wsgi:application
             Restart=always
