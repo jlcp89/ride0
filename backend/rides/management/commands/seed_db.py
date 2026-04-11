@@ -120,11 +120,29 @@ class Command(BaseCommand):
         #         trip_duration_min)
         # trip_duration_min is only meaningful for dropoff rides; others
         # pass 0.
+        # Dropoff durations (the 6th tuple element) feed the bonus
+        # trips-over-1-hour report. Distribution is intentionally designed
+        # so the report shows multiple rows per (month, driver) bucket
+        # instead of all-1s:
+        #
+        #   2026-02  Randy W   1
+        #   2026-03  Chris H   2   ← rides 20 + 21
+        #   2026-03  Howard Y  2   ← rides 22 + 23
+        #   2026-04  Chris H   1
+        #   2026-04  Howard Y  1
+        #   2026-04  Randy W   1
+        #
+        # Ride 22 still gets the extra early pickup event below so the
+        # bonus SQL's MIN(created_at) edge case stays exercised.
+        # Rider distribution (alice/bob/carol) is preserved verbatim from
+        # the earlier spec so the deployed regression counts remain
+        # 8/8/8 across statuses and 8/8/8 across riders.
         ride_specs = [
             # Rides 1-3: fresh dropoffs (all 5 events visible in EVENTS 24H)
-            ("dropoff",  -timedelta(minutes=90), 0, 0, 0, 25),  # alice, chris, zone10
-            ("dropoff",  -timedelta(hours=2),    1, 1, 1, 28),  # bob, howard, zone14
-            ("dropoff",  -timedelta(hours=4),    2, 2, 2, 32),  # carol, randy, antigua
+            # — durations now > 60 min so they appear in the bonus report.
+            ("dropoff",  -timedelta(minutes=90), 0, 0, 0, 90),  # alice, chris, zone10
+            ("dropoff",  -timedelta(hours=2),    1, 1, 1, 80),  # bob, howard, zone14
+            ("dropoff",  -timedelta(hours=4),    2, 2, 2, 70),  # carol, randy, antigua
             # Rides 4-6: en-route, very recent
             ("en-route", -timedelta(minutes=8),  0, 1, 0, 0),   # alice, howard, zone10
             ("en-route", -timedelta(minutes=15), 1, 2, 1, 0),   # bob, randy, zone14
@@ -146,13 +164,18 @@ class Command(BaseCommand):
             ("to-pickup", timedelta(days=1),             0, 0, 2, 0),  # alice #3
             ("to-pickup", timedelta(days=1, hours=12),   2, 1, 0, 0),  # carol
             ("to-pickup", timedelta(days=2),             0, 2, 1, 0),  # alice #4
-            # Rides 20-21: dropoffs ~2 weeks ago — boundary tests
-            ("dropoff",  -timedelta(days=14),    1, 0, 0, 61),  # bob, chris — 61 min included
-            ("dropoff",  -timedelta(days=15),    1, 1, 1, 59),  # bob, howard — 59 min excluded
-            # Rides 22-24: historical dropoffs across months
-            ("dropoff",  -timedelta(days=32),    2, 1, 2, 75),  # carol, howard — 75 min
-            ("dropoff",  -timedelta(days=62),    0, 2, 1, 90),  # alice, randy — 90 min
-            ("dropoff",  -timedelta(days=95),    2, 0, 0, 120),  # carol, chris — 120 min
+            # Rides 20-21: two chris dropoffs in 2026-03 — produces the
+            # "Chris H  2" row in the bonus report.
+            ("dropoff",  -timedelta(days=10),    1, 0, 0, 90),   # bob, chris, 90 min
+            ("dropoff",  -timedelta(days=15),    1, 0, 1, 120),  # bob, chris, 120 min
+            # Rides 22-23: two howard dropoffs in 2026-03 — produces the
+            # "Howard Y  2" row. Ride 22 keeps the MIN(created_at) edge
+            # case (an extra earlier "pickup" event added below).
+            ("dropoff",  -timedelta(days=20),    2, 1, 2, 75),   # carol, howard, 75 min
+            ("dropoff",  -timedelta(days=28),    0, 1, 1, 100),  # alice, howard, 100 min
+            # Ride 24: historical Randy dropoff in 2026-02 — single-count
+            # row, also demonstrates the "across months" grouping.
+            ("dropoff",  -timedelta(days=55),    2, 2, 0, 90),   # carol, randy, 90 min
         ]
 
         rides = []
