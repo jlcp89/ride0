@@ -1,0 +1,507 @@
+{
+	"info": {
+		"_postman_id": "a9c4e1b7-3f21-4a5b-8d6e-2c7f9e4a8b1d",
+		"name": "Wingz Ride API",
+		"description": "Read-only Django REST API for the Wingz ride management assessment. Covers JWT authentication and the `/api/rides/` list + retrieve endpoints. Works against both a local Django runserver (http://localhost:8000) and the deployed EC2 instance (https://wingz-ride.d3sarrollo.dev).\n\n## Quick start\n\n1. Import this collection.\n2. Import **one** environment file from the same folder:\n   - `wingz-api.local.postman_environment.json` for a local runserver\n   - `wingz-api.prod.postman_environment.json` for the deployed API\n3. Select the environment from Postman's top-right dropdown.\n4. Run **Auth → Login** — the `access_token` and `refresh_token` are captured automatically into the active environment.\n5. Every other request is now authenticated via `Authorization: Bearer {{accessToken}}` (inherited from the collection).\n\n## Notes\n\n- Access tokens last **15 minutes**. Re-run **Login** or **Refresh token** when a request returns 401.\n- The `/api/rides/` endpoints require `role=admin`. The seed admin (`admin@wingz.com` / `adminpass123`) already satisfies this.\n- The API is **read-only** — there are no POST/PUT/DELETE endpoints for rides.\n- Seed data is reset on every deploy, so `rideId=1` and `rider_email=alice@example.com` are always valid on the deployed instance.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{accessToken}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+									"const json = pm.response.json();",
+									"pm.test(\"has access_token\", () => pm.expect(json).to.have.property(\"access_token\"));",
+									"pm.test(\"has refresh_token\", () => pm.expect(json).to.have.property(\"refresh_token\"));",
+									"pm.test(\"user.role is admin\", () => pm.expect(json.user.role).to.eql(\"admin\"));",
+									"pm.environment.set(\"accessToken\", json.access_token);",
+									"pm.environment.set(\"refreshToken\", json.refresh_token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/login/",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"login",
+								""
+							]
+						},
+						"description": "Exchange email + password for a JWT pair.\n\n**Success (200)**\n```json\n{\n  \"access_token\": \"<jwt>\",\n  \"refresh_token\": \"<jwt>\",\n  \"expires_in\": 900,\n  \"user\": {\n    \"id\": 1,\n    \"email\": \"admin@wingz.com\",\n    \"role\": \"admin\",\n    \"first_name\": \"Admin\",\n    \"last_name\": \"User\"\n  }\n}\n```\n\nThe test script stores `access_token` + `refresh_token` in the active environment.\n\n**Errors**\n- `400` — missing `email` or `password`\n- `401` — invalid credentials"
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+									"const json = pm.response.json();",
+									"pm.test(\"has access_token\", () => pm.expect(json).to.have.property(\"access_token\"));",
+									"pm.environment.set(\"accessToken\", json.access_token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/refresh/",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"refresh",
+								""
+							]
+						},
+						"description": "Exchange a refresh token for a new access token. The refresh token itself is NOT rotated — it stays valid until its original 7-day expiry.\n\n**Success (200)**\n```json\n{\n  \"access_token\": \"<jwt>\",\n  \"expires_in\": 900\n}\n```\n\nThe test script overwrites `{{accessToken}}` in the active environment.\n\n**Errors**\n- `400` — missing `refresh_token`\n- `401` — invalid or expired refresh token"
+					},
+					"response": []
+				},
+				{
+					"name": "Current user (me)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+									"pm.test(\"role is admin\", () => pm.expect(pm.response.json().role).to.eql(\"admin\"));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/me/",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"me",
+								""
+							]
+						},
+						"description": "Return the currently authenticated user's profile. Requires a valid bearer token.\n\n**Success (200)**\n```json\n{\n  \"id\": 1,\n  \"email\": \"admin@wingz.com\",\n  \"role\": \"admin\",\n  \"first_name\": \"Admin\",\n  \"last_name\": \"User\"\n}\n```\n\n**Errors**\n- `401` — missing or invalid token"
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"status 204\", () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/auth/logout/",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"auth",
+								"logout",
+								""
+							]
+						},
+						"description": "Stateless courtesy endpoint — the server does not track issued tokens, so real invalidation happens client-side (drop both tokens from storage). Returns `204 No Content` when called with a valid bearer token.\n\n**Errors**\n- `401` — missing or invalid token"
+					},
+					"response": []
+				}
+			],
+			"description": "JWT authentication flow. Run **Login** first; tokens are captured into the environment automatically and every other request inherits `Authorization: Bearer {{accessToken}}` from the collection."
+		},
+		{
+			"name": "Rides",
+			"item": [
+				{
+					"name": "List — defaults",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+									"const json = pm.response.json();",
+									"pm.test(\"has pagination envelope\", () => {",
+									"    pm.expect(json).to.have.all.keys(\"count\", \"next\", \"previous\", \"results\");",
+									"});",
+									"pm.test(\"results is an array\", () => pm.expect(json.results).to.be.an(\"array\"));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rides/",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rides",
+								""
+							]
+						},
+						"description": "List rides with default pagination (page 1, page_size 10) and no filters.\n\n**Response envelope**\n```json\n{\n  \"count\": 24,\n  \"next\": \"http://.../api/rides/?page=2\",\n  \"previous\": null,\n  \"results\": [\n    {\n      \"id_ride\": 1,\n      \"status\": \"to-pickup\",\n      \"id_rider\": { \"id_user\": ..., \"email\": \"...\", \"role\": \"rider\", \"first_name\": \"...\", \"last_name\": \"...\", \"phone_number\": \"...\" },\n      \"id_driver\": { ... },\n      \"pickup_latitude\": 14.5995,\n      \"pickup_longitude\": -90.5131,\n      \"dropoff_latitude\": 14.60,\n      \"dropoff_longitude\": -90.51,\n      \"pickup_time\": \"2026-04-10T15:00:00Z\",\n      \"todays_ride_events\": [ { \"id_ride_event\": 1, \"description\": \"Ride requested\", \"created_at\": \"...\" } ]\n    }\n  ]\n}\n```\n\n`todays_ride_events` only includes events from the last 24 hours (filtered at the DB level via a `Prefetch`).\n\n**Errors**\n- `401` — missing or invalid token\n- `403` — authenticated user is not an admin"
+					},
+					"response": []
+				},
+				{
+					"name": "List — paginated",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rides/?page=2&page_size=5",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rides",
+								""
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "2",
+									"description": "1-indexed page number. Default: 1."
+								},
+								{
+									"key": "page_size",
+									"value": "5",
+									"description": "Items per page. Default: 10. Max: 100 (larger values are silently capped)."
+								}
+							]
+						},
+						"description": "Demonstrates the `page` + `page_size` query params. `next`/`previous` in the response envelope point at the adjacent pages."
+					},
+					"response": []
+				},
+				{
+					"name": "List — filter by status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rides/?status=en-route&page_size=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rides",
+								""
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "en-route",
+									"description": "Filter by ride status. Valid values: `to-pickup`, `en-route`, `dropoff`."
+								},
+								{
+									"key": "page_size",
+									"value": "100"
+								}
+							]
+						},
+						"description": "Filter rides by status. Try swapping `status` to `to-pickup` or `dropoff` to see the other lifecycle phases."
+					},
+					"response": []
+				},
+				{
+					"name": "List — filter by rider email",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rides/?rider_email=alice@example.com&page_size=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rides",
+								""
+							],
+							"query": [
+								{
+									"key": "rider_email",
+									"value": "alice@example.com",
+									"description": "Exact-match filter on the rider's email address. The seed DB gives Alice 8 rides."
+								},
+								{
+									"key": "page_size",
+									"value": "100"
+								}
+							]
+						},
+						"description": "Filter rides by rider email (exact match). Against seed data, `alice@example.com` returns 8 rides."
+					},
+					"response": []
+				},
+				{
+					"name": "List — combined filters",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rides/?status=dropoff&rider_email=alice@example.com&page_size=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rides",
+								""
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "dropoff"
+								},
+								{
+									"key": "rider_email",
+									"value": "alice@example.com"
+								},
+								{
+									"key": "page_size",
+									"value": "100"
+								}
+							]
+						},
+						"description": "`status` and `rider_email` can be combined — both filters are applied."
+					},
+					"response": []
+				},
+				{
+					"name": "List — sort by pickup_time",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rides/?sort_by=pickup_time&page_size=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rides",
+								""
+							],
+							"query": [
+								{
+									"key": "sort_by",
+									"value": "pickup_time",
+									"description": "Sort key. Valid values: `pickup_time`, `distance` (distance also requires `latitude` + `longitude`)."
+								},
+								{
+									"key": "page_size",
+									"value": "100"
+								}
+							]
+						},
+						"description": "Sort rides by `pickup_time` ascending. Without a `sort_by`, results are ordered by `id_ride` (the model default)."
+					},
+					"response": []
+				},
+				{
+					"name": "List — sort by distance",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rides/?sort_by=distance&latitude=14.5995&longitude=-90.5131&page_size=100",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rides",
+								""
+							],
+							"query": [
+								{
+									"key": "sort_by",
+									"value": "distance",
+									"description": "Sort by Haversine distance from (latitude, longitude). Distance is computed at the database level so ORDER BY + pagination work on the full dataset."
+								},
+								{
+									"key": "latitude",
+									"value": "14.5995",
+									"description": "Reference latitude in decimal degrees. Required when sort_by=distance."
+								},
+								{
+									"key": "longitude",
+									"value": "-90.5131",
+									"description": "Reference longitude in decimal degrees. Required when sort_by=distance."
+								},
+								{
+									"key": "page_size",
+									"value": "100"
+								}
+							]
+						},
+						"description": "Sort by proximity to a reference point (here: Guatemala City, matching `ride0/tests/test_deployed_api.sh` so Postman and the shell regression cover the same cases). Nearest rides come first.\n\nChange `latitude`/`longitude` to any valid decimal-degree pair to re-sort around a different reference point."
+					},
+					"response": []
+				},
+				{
+					"name": "List — distance missing lat/lng (expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+									"pm.test(\"error mentions latitude/longitude\", () => {",
+									"    pm.expect(pm.response.json().error).to.match(/latitude and longitude are required/i);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rides/?sort_by=distance",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rides",
+								""
+							],
+							"query": [
+								{
+									"key": "sort_by",
+									"value": "distance"
+								}
+							]
+						},
+						"description": "Validation case — `sort_by=distance` without `latitude`/`longitude` must return 400 with `{\"error\": \"latitude and longitude are required for distance sorting\"}`. The test script asserts both the status and the error message."
+					},
+					"response": []
+				},
+				{
+					"name": "Retrieve ride by id",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+									"const json = pm.response.json();",
+									"pm.test(\"has id_ride\", () => pm.expect(json).to.have.property(\"id_ride\"));",
+									"pm.test(\"id_ride matches rideId variable\", () => {",
+									"    pm.expect(String(json.id_ride)).to.eql(pm.environment.get(\"rideId\"));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rides/{{rideId}}/",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rides",
+								"{{rideId}}",
+								""
+							]
+						},
+						"description": "Fetch a single ride by primary key (`id_ride`). Returns the same nested shape as a single list result.\n\nChange the `rideId` environment variable to fetch a different ride.\n\n**Errors**\n- `404` — ride does not exist\n- `401` / `403` — auth issues"
+					},
+					"response": []
+				}
+			],
+			"description": "List + retrieve against `/api/rides/`. All requests inherit `Authorization: Bearer {{accessToken}}` from the collection and require the authenticated user to have `role=admin`."
+		}
+	]
+}
