@@ -1,21 +1,28 @@
 -- Seed Data for Wingz Ride Management API
 -- Every row exists to test something specific.
+--
+-- NOTE: This file is schema/data REFERENCE material. The authoritative
+-- runtime seed is `backend/rides/management/commands/seed_db.py`, which
+-- the deploy workflow invokes and which uses now-relative timestamps so
+-- the UI always shows fresh data. This SQL file uses illustrative 2024
+-- dates and can drift from the Python source — keep it readable at rest,
+-- not runnable against a live DB.
 
 -- ============================================================
 -- USERS (7 total)
 -- ============================================================
 -- id=1: admin (password: adminpass123)
 -- id=2-4: drivers (Chris H, Howard Y, Randy W) — match bonus SQL sample output
--- id=5-7: riders (Alice, Bob, Carol) — filter by rider_email tests
+-- id=5-7: riders (Alice Johnson, Bob Martin, Carol Davis) — external @example.com emails
 
 INSERT INTO users (id_user, role, first_name, last_name, email, phone_number, password) VALUES
-(1, 'admin',  'Admin',  'User',  'admin@wingz.com',  '555-0001', 'pbkdf2_sha256$870000$26CDzVyj5UBvtRGjRIq943$ukWbXMBefm9/OIArA/1mtPsohxVhdhfDHFESAWYUedk='),
-(2, 'driver', 'Chris',  'H',     'chris@wingz.com',  '555-0002', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
-(3, 'driver', 'Howard', 'Y',     'howard@wingz.com', '555-0003', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
-(4, 'driver', 'Randy',  'W',     'randy@wingz.com',  '555-0004', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
-(5, 'rider',  'Alice',  'Rider', 'alice@wingz.com',  '555-0010', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
-(6, 'rider',  'Bob',    'Rider', 'bob@wingz.com',    '555-0011', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
-(7, 'rider',  'Carol',  'Rider', 'carol@wingz.com',  '555-0012', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo=');
+(1, 'admin',  'Admin',  'User',    'admin@wingz.com',   '555-0001', 'pbkdf2_sha256$870000$26CDzVyj5UBvtRGjRIq943$ukWbXMBefm9/OIArA/1mtPsohxVhdhfDHFESAWYUedk='),
+(2, 'driver', 'Chris',  'H',       'chris@wingz.com',   '555-0002', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
+(3, 'driver', 'Howard', 'Y',       'howard@wingz.com',  '555-0003', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
+(4, 'driver', 'Randy',  'W',       'randy@wingz.com',   '555-0004', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
+(5, 'rider',  'Alice',  'Johnson', 'alice@example.com', '555-0010', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
+(6, 'rider',  'Bob',    'Martin',  'bob@example.com',   '555-0011', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo='),
+(7, 'rider',  'Carol',  'Davis',   'carol@example.com', '555-0012', 'pbkdf2_sha256$870000$BgzVjAeEqnwmtaiYLh9bYV$cxUpFivf3ZLxxTrBT6YP7rgken1hB57WK2pBpbuJSgo=');
 
 -- ============================================================
 -- RIDES (24 total)

@@ -73,4 +73,6 @@ Assessment benefits from a working frontend demo of the ride list API. Must depl
 
 Future ideas and deferred items. Move to active requirements when ready.
 
-- (empty)
+- **Deployed regression coverage for `GET /api/rides/{id}/`** — the ride1 detail drawer (session 6) exercises this endpoint client-side, but `test_deployed_api.sh` only covers `/api/rides/`. Add a DETAIL-01 case that fetches a specific ride and asserts the shape matches a list item. Low risk (serializer is shared) but closes the loop.
+- **ride1 keyboard shortcut registry (v2)** — cut from the session 6 UX overhaul for scope. Would add `/` to focus rider-email search, `s` for status, `←`/`→` globally for pagination, `?` for a keyboard-help overlay, `c` to clear filters, `r` to refresh, `g t` chord to scroll to top, `j`/`k` row navigation, `Enter` on focused row to open drawer. Implementation sketch lives in Plan B of `/home/jl2/.claude/plans/ethereal-scribbling-lollipop.md` (section A, `useKeyboardShortcuts.js`).
+- **HTTPS for ride1 in prod** — `navigator.geolocation` requires a secure origin, so the `Use my location` button is a no-op on the plain-HTTP EC2 deployment. Solutions: (a) Let's Encrypt + nginx HTTPS block, (b) put CloudFront or ALB in front and terminate TLS there, (c) ship a "pick a seed zone" dropdown with preset Guatemala City / Antigua coordinates as a product workaround. Any of these unblocks geolocation and also clears up the mixed-content warning users would hit if we ever added a third-party embed.

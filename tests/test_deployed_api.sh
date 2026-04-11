@@ -17,7 +17,7 @@ LOGIN_URL="${BASE_URL}/api/auth/login/"
 
 ADMIN_EMAIL="admin@wingz.com"
 ADMIN_PASSWORD="adminpass123"
-RIDER_EMAIL="alice@wingz.com"
+RIDER_EMAIL="alice@example.com"
 RIDER_PASSWORD="driverpass123"
 DRIVER_EMAIL="chris@wingz.com"
 DRIVER_PASSWORD="driverpass123"
@@ -273,16 +273,16 @@ assert_jq "FILT-02" "status=dropoff count is 8" '.count' "8"
 fetch_auth "${ENDPOINT}?status=en-route&page_size=100"
 assert_jq "FILT-03" "status=en-route count is 8" '.count' "8"
 
-fetch_auth "${ENDPOINT}?rider_email=alice@wingz.com&page_size=100"
+fetch_auth "${ENDPOINT}?rider_email=alice@example.com&page_size=100"
 assert_jq "FILT-04a" "rider_email=alice count is 8" '.count' "8"
-FILT04_ALL=$(echo "$BODY" | jq '[.results[].id_rider.email] | all(. == "alice@wingz.com")')
+FILT04_ALL=$(echo "$BODY" | jq '[.results[].id_rider.email] | all(. == "alice@example.com")')
 if [[ "$FILT04_ALL" == "true" ]]; then
     pass_test "FILT-04b" "All results have rider_email=alice"
 else
     fail_test "FILT-04b" "All results have rider_email=alice" "Some results have wrong rider"
 fi
 
-fetch_auth "${ENDPOINT}?status=pickup&rider_email=alice@wingz.com&page_size=100"
+fetch_auth "${ENDPOINT}?status=pickup&rider_email=alice@example.com&page_size=100"
 assert_jq "FILT-05" "Combined pickup+alice count is 4" '.count' "4"
 
 fetch_auth "${ENDPOINT}?status=invalid"
