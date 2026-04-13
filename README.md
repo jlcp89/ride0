@@ -418,6 +418,64 @@ class TestQueryCount:
 
 `TestQueryCount` also verifies that the events query actually filters on `created_at` (so a regression back to a full-table prefetch would be caught) and that old events are excluded from the response end-to-end.
 
+### Receipts, not claims
+
+Most take-home submissions *claim* a query budget. Here is the budget, run fresh against this codebase. Reproduce both blocks with the commands inside each.
+
+**1. Pytest receipt** &nbsp;—&nbsp; `cd backend && .venv/bin/pytest tests/test_performance.py -v`
+
+```text
+============================= test session starts ==============================
+platform linux -- Python 3.13.7, pytest-8.3.5, pluggy-1.6.0
+django: version: 5.1.15, settings: wingz.settings (from ini)
+rootdir: /.../ride0/backend
+configfile: pytest.ini
+plugins: django-4.9.0
+collected 4 items
+
+tests/test_performance.py::TestQueryCount::test_max_3_queries PASSED     [ 25%]
+tests/test_performance.py::TestQueryCount::test_no_n_plus_1 PASSED       [ 50%]
+tests/test_performance.py::TestQueryCount::test_prefetch_filters_created_at PASSED [ 75%]
+tests/test_performance.py::TestQueryCount::test_todays_events_only_recent PASSED [100%]
+
+============================== 4 passed in 0.99s ===============================
+```
+
+Four assertions are enforced: `≤ 3` total queries, query count is flat as rides grow from 5 to 25, the events query actually filters on `created_at`, and the response excludes stale events end-to-end.
+
+**2. SQL receipt** &nbsp;—&nbsp; captured from `CaptureQueriesContext` while hitting `GET /api/rides/` with an authenticated admin against a freshly seeded SQLite database. These are the literal three queries Django issues — copied verbatim, only whitespace added for readability:
+
+```sql
+-- Query 1/3 — Pagination COUNT
+SELECT COUNT(*) AS "__count" FROM "rides";
+
+-- Query 2/3 — Paginated rides with both users JOINed (select_related)
+SELECT "rides"."id_ride", "rides"."status", "rides"."id_rider", "rides"."id_driver",
+       "rides"."pickup_latitude", "rides"."pickup_longitude",
+       "rides"."dropoff_latitude", "rides"."dropoff_longitude", "rides"."pickup_time",
+       "users"."id_user", "users"."role", "users"."first_name", "users"."last_name",
+       "users"."email", "users"."phone_number", "users"."password",
+       T3."id_user", T3."role", T3."first_name", T3."last_name",
+       T3."email", T3."phone_number", T3."password"
+FROM "rides"
+INNER JOIN "users"    ON ("rides"."id_rider"  = "users"."id_user")
+INNER JOIN "users" T3 ON ("rides"."id_driver" = T3."id_user")
+ORDER BY "rides"."id_ride" ASC
+LIMIT 10;
+
+-- Query 3/3 — Filtered Prefetch for the last 24h of ride events ONLY,
+--             scoped to the IDs returned by Query 2. The full ride_events
+--             table is never scanned. Both the created_at filter and the
+--             id_ride IN (...) clause are index-friendly on a real DB.
+SELECT "ride_events"."id_ride_event", "ride_events"."id_ride",
+       "ride_events"."description", "ride_events"."created_at"
+FROM "ride_events"
+WHERE "ride_events"."created_at" >= '<now - 24h>'
+  AND "ride_events"."id_ride" IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+```
+
+Three queries, independent of page size, independent of the size of the `ride_events` table. If you add a 21st ride or 10,000 more events, the SQL shape and count do not change — only the `IN (...)` list does. The `password` columns appear in the `SELECT` list because Django's ORM fetches all model fields by default, but they are explicitly excluded from the serializer's output (`UserSerializer.Meta.fields`) so they never leave the process.
+
 ### Why this matters at scale
 
 The spec explicitly says the ride table and the ride-event table will be very large. A naive implementation would fetch every related event per ride and filter in Python, which is O(N × E) memory and O(N × E) network. This design is O(1) queries and pushes the `WHERE created_at >= ...` predicate into the database, where an index on `(id_ride, created_at)` would make it trivially fast.
