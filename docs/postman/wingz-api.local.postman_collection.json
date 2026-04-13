@@ -78,7 +78,9 @@
 							"script": {
 								"type": "text/javascript",
 								"exec": [
-									"pm.request.headers.remove('Authorization');"
+									"pm.request.headers.remove('Authorization');",
+									"const rt = pm.collectionVariables.get('refreshToken');",
+									"if (rt) { pm.request.body.raw = JSON.stringify({ refresh_token: rt }); }"
 								]
 							}
 						},
