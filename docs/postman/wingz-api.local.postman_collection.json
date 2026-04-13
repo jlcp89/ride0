@@ -1,8 +1,8 @@
 {
 	"info": {
-		"_postman_id": "a9c4e1b7-3f21-4a5b-8d6e-2c7f9e4a8b1d",
-		"name": "Wingz Ride API (Prod)",
-		"description": "Deployed API at https://wingz-ride.d3sarrollo.dev\n\n## Quick start\n\n1. Import this collection.\n2. Run **Auth → Login**.\n3. Run **Users → List users**.\n4. Run anything else.\n\nNo environment needed. Tokens are managed automatically.",
+		"_postman_id": "b8d5e3a2-7f19-4c6b-9e4d-1a3f8c2b5d7e",
+		"name": "Wingz Ride API (Local)",
+		"description": "Deployed API at http://localhost:8000\n\n## Quick start\n\n1. Import this collection.\n2. Run **Auth → Login**.\n3. Run **Users → List users**.\n4. Run anything else.\n\nNo environment needed. Tokens are managed automatically.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"event": [
@@ -66,7 +66,7 @@
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": { "mode": "raw", "raw": "{\n  \"email\": \"admin@wingz.com\",\n  \"password\": \"adminpass123\"\n}" },
-						"url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/auth/login/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","auth","login",""] }
+						"url": { "raw": "http://localhost:8000/api/auth/login/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","auth","login",""] }
 					},
 					"response": []
 				},
@@ -100,7 +100,7 @@
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}" },
-						"url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/auth/refresh/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","auth","refresh",""] }
+						"url": { "raw": "http://localhost:8000/api/auth/refresh/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","auth","refresh",""] }
 					},
 					"response": []
 				},
@@ -121,7 +121,7 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/auth/me/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","auth","me",""] }
+						"url": { "raw": "http://localhost:8000/api/auth/me/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","auth","me",""] }
 					},
 					"response": []
 				},
@@ -141,7 +141,7 @@
 					"request": {
 						"method": "POST",
 						"header": [],
-						"url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/auth/logout/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","auth","logout",""] }
+						"url": { "raw": "http://localhost:8000/api/auth/logout/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","auth","logout",""] }
 					},
 					"response": []
 				}
@@ -165,37 +165,37 @@
 						"    pm.test('todays_ride_events', () => pm.expect(r.todays_ride_events).to.be.an('array'));",
 						"}"
 					]}}],
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides",""] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/rides/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides",""] } },
 					"response": []
 				},
 				{
 					"name": "List — paginated",
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/?page=2&page_size=5", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides",""], "query": [{"key":"page","value":"2"},{"key":"page_size","value":"5"}] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/rides/?page=2&page_size=5", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides",""], "query": [{"key":"page","value":"2"},{"key":"page_size","value":"5"}] } },
 					"response": []
 				},
 				{
 					"name": "List — filter by status",
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/?status=en-route&page_size=100", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides",""], "query": [{"key":"status","value":"en-route","description":"Valid: to-pickup, en-route, dropoff"},{"key":"page_size","value":"100"}] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/rides/?status=en-route&page_size=100", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides",""], "query": [{"key":"status","value":"en-route","description":"Valid: to-pickup, en-route, dropoff"},{"key":"page_size","value":"100"}] } },
 					"response": []
 				},
 				{
 					"name": "List — filter by rider email",
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/?rider_email=alice@example.com&page_size=100", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides",""], "query": [{"key":"rider_email","value":"alice@example.com"},{"key":"page_size","value":"100"}] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/rides/?rider_email=alice@example.com&page_size=100", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides",""], "query": [{"key":"rider_email","value":"alice@example.com"},{"key":"page_size","value":"100"}] } },
 					"response": []
 				},
 				{
 					"name": "List — combined filters",
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/?status=dropoff&rider_email=alice@example.com&page_size=100", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides",""], "query": [{"key":"status","value":"dropoff"},{"key":"rider_email","value":"alice@example.com"},{"key":"page_size","value":"100"}] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/rides/?status=dropoff&rider_email=alice@example.com&page_size=100", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides",""], "query": [{"key":"status","value":"dropoff"},{"key":"rider_email","value":"alice@example.com"},{"key":"page_size","value":"100"}] } },
 					"response": []
 				},
 				{
 					"name": "List — sort by pickup_time",
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/?sort_by=pickup_time&page_size=100", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides",""], "query": [{"key":"sort_by","value":"pickup_time"},{"key":"page_size","value":"100"}] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/rides/?sort_by=pickup_time&page_size=100", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides",""], "query": [{"key":"sort_by","value":"pickup_time"},{"key":"page_size","value":"100"}] } },
 					"response": []
 				},
 				{
 					"name": "List — sort by distance",
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/?sort_by=distance&latitude=14.5995&longitude=-90.5131&page_size=100", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides",""], "query": [{"key":"sort_by","value":"distance"},{"key":"latitude","value":"14.5995"},{"key":"longitude","value":"-90.5131"},{"key":"page_size","value":"100"}] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/rides/?sort_by=distance&latitude=14.5995&longitude=-90.5131&page_size=100", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides",""], "query": [{"key":"sort_by","value":"distance"},{"key":"latitude","value":"14.5995"},{"key":"longitude","value":"-90.5131"},{"key":"page_size","value":"100"}] } },
 					"response": []
 				},
 				{
@@ -204,7 +204,7 @@
 						"pm.test('status 400', () => pm.response.to.have.status(400));",
 						"pm.test('error message', () => pm.expect(pm.response.json().error).to.match(/latitude and longitude are required/i));"
 					]}}],
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/?sort_by=distance", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides",""], "query": [{"key":"sort_by","value":"distance"}] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/rides/?sort_by=distance", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides",""], "query": [{"key":"sort_by","value":"distance"}] } },
 					"response": []
 				},
 				{
@@ -217,7 +217,7 @@
 						"pm.test('nested driver', () => pm.expect(json.id_driver).to.be.an('object'));",
 						"pm.test('todays_ride_events', () => pm.expect(json.todays_ride_events).to.be.an('array'));"
 					]}}],
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/1/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides","1",""] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/rides/1/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides","1",""] } },
 					"response": []
 				}
 			],
@@ -242,7 +242,7 @@
 						"method": "POST",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": { "mode": "raw", "raw": "{\n  \"status\": \"to-pickup\",\n  \"id_rider\": {{riderId}},\n  \"id_driver\": {{driverId}},\n  \"pickup_latitude\": 14.6349,\n  \"pickup_longitude\": -90.5069,\n  \"dropoff_latitude\": 14.5995,\n  \"dropoff_longitude\": -90.5131,\n  \"pickup_time\": \"2026-06-15T16:00:00Z\"\n}" },
-						"url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides",""] },
+						"url": { "raw": "http://localhost:8000/api/rides/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides",""] },
 						"description": "Run Users → List users first to populate {{riderId}} and {{driverId}}."
 					},
 					"response": []
@@ -257,7 +257,7 @@
 						"method": "PATCH",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": { "mode": "raw", "raw": "{\n  \"status\": \"en-route\",\n  \"pickup_latitude\": 14.6400,\n  \"pickup_longitude\": -90.5100\n}" },
-						"url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/{{newRideId}}/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides","{{newRideId}}",""] }
+						"url": { "raw": "http://localhost:8000/api/rides/{{newRideId}}/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides","{{newRideId}}",""] }
 					},
 					"response": []
 				},
@@ -271,7 +271,7 @@
 						"method": "PATCH",
 						"header": [{ "key": "Content-Type", "value": "application/json" }],
 						"body": { "mode": "raw", "raw": "{\n  \"status\": \"invalid-status\",\n  \"pickup_latitude\": 999\n}" },
-						"url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/{{newRideId}}/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides","{{newRideId}}",""] }
+						"url": { "raw": "http://localhost:8000/api/rides/{{newRideId}}/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides","{{newRideId}}",""] }
 					},
 					"response": []
 				},
@@ -283,7 +283,7 @@
 					"request": {
 						"method": "DELETE",
 						"header": [],
-						"url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/{{newRideId}}/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides","{{newRideId}}",""] }
+						"url": { "raw": "http://localhost:8000/api/rides/{{newRideId}}/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides","{{newRideId}}",""] }
 					},
 					"response": []
 				},
@@ -295,7 +295,7 @@
 					"request": {
 						"method": "GET",
 						"header": [],
-						"url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/rides/{{newRideId}}/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","rides","{{newRideId}}",""] }
+						"url": { "raw": "http://localhost:8000/api/rides/{{newRideId}}/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","rides","{{newRideId}}",""] }
 					},
 					"response": []
 				}
@@ -317,7 +317,7 @@
 						"if (riders.length > 0) pm.collectionVariables.set('riderId', riders[0].id_user);",
 						"if (drivers.length > 0) pm.collectionVariables.set('driverId', drivers[0].id_user);"
 					]}}],
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/users/?page_size=100", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","users",""], "query": [{"key":"page_size","value":"100"}] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/users/?page_size=100", "protocol": "http", "host": ["localhost:8000"], "path": ["api","users",""], "query": [{"key":"page_size","value":"100"}] } },
 					"response": []
 				}
 			],
@@ -336,7 +336,7 @@
 						"    pm.test('row shape', () => pm.expect(json.results[0]).to.have.all.keys('month','driver','count'));",
 						"}"
 					]}}],
-					"request": { "method": "GET", "header": [], "url": { "raw": "https://wingz-ride.d3sarrollo.dev/api/reports/trips-over-hour/", "protocol": "https", "host": ["wingz-ride","d3sarrollo","dev"], "path": ["api","reports","trips-over-hour",""] } },
+					"request": { "method": "GET", "header": [], "url": { "raw": "http://localhost:8000/api/reports/trips-over-hour/", "protocol": "http", "host": ["localhost:8000"], "path": ["api","reports","trips-over-hour",""] } },
 					"response": []
 				}
 			],
