@@ -96,6 +96,35 @@ jobs:
             sudo systemctl start wingz-api
             sleep 2
             curl -sf http://localhost:8000/api/rides/ -o /dev/null -w "%{http_code}" || echo "WARNING: Health check failed"
+            echo "Installing wingz-seed timer + service..."
+            sudo tee /etc/systemd/system/wingz-seed.service > /dev/null <<EOF
+            [Unit]
+            Description=Wingz Demo DB Re-seed (oneshot)
+            After=network.target wingz-api.service
+
+            [Service]
+            Type=oneshot
+            User=ec2-user
+            WorkingDirectory=/home/ec2-user/production/wingz
+            Environment="USE_SQLITE=1"
+            Environment="DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}"
+            ExecStart=/home/ec2-user/production/wingz/.venv/bin/python manage.py seed_db
+            EOF
+            sudo tee /etc/systemd/system/wingz-seed.timer > /dev/null <<EOF
+            [Unit]
+            Description=Run wingz-seed.service daily at 03:00 UTC
+
+            [Timer]
+            OnCalendar=*-*-* 03:00:00
+            Persistent=true
+            Unit=wingz-seed.service
+
+            [Install]
+            WantedBy=timers.target
+            EOF
+            sudo systemctl daemon-reload
+            sudo systemctl enable --now wingz-seed.timer
+            sudo systemctl start wingz-seed.service
             echo "DEV deployment finished."
 
   deploy_prod:
@@ -165,4 +194,33 @@ jobs:
             sudo systemctl start wingz-api
             sleep 2
             curl -sf http://localhost:8000/api/rides/ -o /dev/null -w "%{http_code}" || echo "WARNING: Health check failed"
+            echo "Installing wingz-seed timer + service..."
+            sudo tee /etc/systemd/system/wingz-seed.service > /dev/null <<EOF
+            [Unit]
+            Description=Wingz Demo DB Re-seed (oneshot)
+            After=network.target wingz-api.service
+
+            [Service]
+            Type=oneshot
+            User=ec2-user
+            WorkingDirectory=/home/ec2-user/production/wingz
+            Environment="USE_SQLITE=1"
+            Environment="DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}"
+            ExecStart=/home/ec2-user/production/wingz/.venv/bin/python manage.py seed_db
+            EOF
+            sudo tee /etc/systemd/system/wingz-seed.timer > /dev/null <<EOF
+            [Unit]
+            Description=Run wingz-seed.service daily at 03:00 UTC
+
+            [Timer]
+            OnCalendar=*-*-* 03:00:00
+            Persistent=true
+            Unit=wingz-seed.service
+
+            [Install]
+            WantedBy=timers.target
+            EOF
+            sudo systemctl daemon-reload
+            sudo systemctl enable --now wingz-seed.timer
+            sudo systemctl start wingz-seed.service
             echo "PROD deployment finished."
